@@ -1,0 +1,57 @@
+{
+  "name": "MiniGTA",
+  "tree": {
+    "$className": "DataModel",
+
+    "ReplicatedStorage": {
+      "Shared": {
+        "$path": "src/shared"
+      }
+    },
+
+    "ServerScriptService": {
+      "Server": {
+        "$path": "src/server"
+      }
+    },
+
+    "StarterPlayer": {
+      "StarterPlayerScripts": {
+        "Client": {
+          "$path": "src/client"
+        }
+      }
+    },
+
+    "Workspace": {
+      "$properties": {
+        "FilteringEnabled": true,
+        "StreamingEnabled": true,
+        "StreamingMinRadius": 256,
+        "StreamingTargetRadius": 512,
+        "Gravity": 196.2
+      }
+    },
+
+    "Lighting": {
+      "$properties": {
+        "Ambient": [0.15, 0.15, 0.15],
+        "Brightness": 2,
+        "ClockTime": 14,
+        "GlobalShadows": true,
+        "Outlines": false,
+        "Technology": "Voxel",
+        "OutdoorAmbient": [0.3, 0.3, 0.3],
+        "FogStart": 500,
+        "FogEnd": 2000,
+        "FogColor": [0.7, 0.8, 0.9]
+      }
+    },
+
+    "SoundService": {
+      "$properties": {
+        "RespectFilteringEnabled": true
+      }
+    }
+  }
+}
