@@ -1,18 +1,15 @@
 -- PlayerController.client.luau
--- Camera-relative movement (WASD moves toward camera look direction),
--- sprint (Shift), interaction (E).
+-- Camera-relative WASD movement + sprint.
+-- Default Roblox controls are disabled in FreeCam.client.luau,
+-- so this is the only thing driving Humanoid:Move().
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local Workspace = game:GetService("Workspace")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local player = Players.LocalPlayer
 local camera = Workspace.CurrentCamera
-
-local Shared = ReplicatedStorage:WaitForChild("Shared", 10)
-local GTAConfig = require(Shared:WaitForChild("GTAConfig"))
 
 --------------------------------------------------------------------------------
 -- SPRINT
@@ -35,55 +32,64 @@ player.CharacterAdded:Connect(function(character)
 	local humanoid = character:WaitForChild("Humanoid", 5)
 	if humanoid then
 		humanoid.WalkSpeed = isSprinting and SPRINT_SPEED or DEFAULT_WALK_SPEED
+		-- Auto-rotate character to face movement direction
+		humanoid.AutoRotate = true
 	end
 end)
 
 --------------------------------------------------------------------------------
--- CAMERA-RELATIVE MOVEMENT
--- Roblox default Humanoid:Move() uses world-space. We override it each frame
--- so WASD is relative to where the camera is looking.
+-- MOVEMENT (every frame)
 --------------------------------------------------------------------------------
 
-RunService.RenderStepped:Connect(function()
+local function isMovementKey(keyCode)
+	return keyCode == Enum.KeyCode.W
+		or keyCode == Enum.KeyCode.A
+		or keyCode == Enum.KeyCode.S
+		or keyCode == Enum.KeyCode.D
+end
+
+RunService.Heartbeat:Connect(function()
 	local character = player.Character
 	if not character then return end
 	local humanoid = character:FindFirstChildOfClass("Humanoid")
-	if not humanoid then return end
+	if not humanoid or humanoid.Health <= 0 then return end
 
-	-- Build move vector from keyboard input
-	local moveX, moveZ = 0, 0
+	-- Read WASD
+	local forward = UserInputService:IsKeyDown(Enum.KeyCode.W) and 1 or 0
+	local backward = UserInputService:IsKeyDown(Enum.KeyCode.S) and 1 or 0
+	local left = UserInputService:IsKeyDown(Enum.KeyCode.A) and 1 or 0
+	local right = UserInputService:IsKeyDown(Enum.KeyCode.D) and 1 or 0
 
-	if UserInputService:IsKeyDown(Enum.KeyCode.W) then moveZ -= 1 end
-	if UserInputService:IsKeyDown(Enum.KeyCode.S) then moveZ += 1 end
-	if UserInputService:IsKeyDown(Enum.KeyCode.A) then moveX -= 1 end
-	if UserInputService:IsKeyDown(Enum.KeyCode.D) then moveX += 1 end
+	local inputX = right - left
+	local inputZ = backward - forward  -- negative Z = forward in Roblox
 
-	if moveX == 0 and moveZ == 0 then
+	if inputX == 0 and inputZ == 0 then
 		humanoid:Move(Vector3.zero)
 		return
 	end
 
-	-- Get camera's flat look/right vectors (ignore pitch)
+	-- Get camera's flat (XZ) look and right vectors
 	local camCF = camera.CFrame
 	local camLook = Vector3.new(camCF.LookVector.X, 0, camCF.LookVector.Z)
-	if camLook.Magnitude > 0.001 then
-		camLook = camLook.Unit
-	else
+	if camLook.Magnitude < 0.001 then
 		camLook = Vector3.new(0, 0, -1)
 	end
-	local camRight = Vector3.new(camLook.Z, 0, -camLook.X) -- 90° rotated
+	camLook = camLook.Unit
 
-	-- Combine into world-space direction
-	local worldDir = (camLook * -moveZ + camRight * moveX)
-	if worldDir.Magnitude > 0.001 then
-		worldDir = worldDir.Unit
+	local camRight = Vector3.new(-camLook.Z, 0, camLook.X)
+
+	-- World-space movement direction
+	local moveDir = camLook * -inputZ + camRight * inputX
+	if moveDir.Magnitude > 0.001 then
+		moveDir = moveDir.Unit
 	end
 
-	humanoid:Move(worldDir, false)
+	-- Move in world space (false = not relative to camera, we already computed world dir)
+	humanoid:Move(moveDir, false)
 end)
 
 --------------------------------------------------------------------------------
--- INPUT
+-- INPUT: Sprint + Jump
 --------------------------------------------------------------------------------
 
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
@@ -91,6 +97,17 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 
 	if input.KeyCode == Enum.KeyCode.LeftShift or input.KeyCode == Enum.KeyCode.RightShift then
 		setSprint(true)
+	end
+
+	-- Jump (since default controls are disabled)
+	if input.KeyCode == Enum.KeyCode.Space then
+		local character = player.Character
+		if character then
+			local humanoid = character:FindFirstChildOfClass("Humanoid")
+			if humanoid then
+				humanoid.Jump = true
+			end
+		end
 	end
 end)
 
@@ -100,4 +117,4 @@ UserInputService.InputEnded:Connect(function(input)
 	end
 end)
 
-print("[PlayerController] Camera-relative movement loaded — Shift to sprint")
+print("[PlayerController] Camera-relative movement loaded — Shift=sprint, Space=jump")

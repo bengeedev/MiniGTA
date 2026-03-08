@@ -1,6 +1,8 @@
 -- FreeCam.client.luau
--- GTA-style third-person camera: auto-follows behind player movement,
--- mouse/touch to look around, auto-returns behind player, scroll zoom, collision.
+-- GTA-style third-person camera.
+-- Camera stays behind the character's facing direction.
+-- Right-click to free-look; releases and smoothly returns behind player.
+-- Scroll to zoom. Collision avoidance.
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -11,37 +13,52 @@ local player = Players.LocalPlayer
 local camera = Workspace.CurrentCamera
 
 --------------------------------------------------------------------------------
+-- Disable default Roblox camera + controls (we handle everything)
+--------------------------------------------------------------------------------
+
+local playerScripts = player:WaitForChild("PlayerScripts", 5)
+if playerScripts then
+	local ok, PlayerModule = pcall(function()
+		return require(playerScripts:WaitForChild("PlayerModule", 5))
+	end)
+	if ok and PlayerModule then
+		local controls = PlayerModule:GetControls()
+		if controls then
+			controls:Disable()
+		end
+	end
+end
+
+--------------------------------------------------------------------------------
 -- CONFIG
 --------------------------------------------------------------------------------
 
-local MIN_DISTANCE = 5
+local MIN_DISTANCE = 6
 local MAX_DISTANCE = 30
-local DEFAULT_DISTANCE = 12
+local DEFAULT_DISTANCE = 14
 local ZOOM_STEP = 2
-local SENSITIVITY_X = 0.4   -- degrees per pixel
-local SENSITIVITY_Y = 0.25
-local MIN_PITCH = -30
+local SENSITIVITY_X = 0.3
+local SENSITIVITY_Y = 0.2
+local MIN_PITCH = -20
 local MAX_PITCH = 60
-local DEFAULT_PITCH = 20
-local CAMERA_HEIGHT_OFFSET = 3  -- look above character center
+local DEFAULT_PITCH = 18
+local CAMERA_HEIGHT_OFFSET = 3
 
--- Auto-follow: camera smoothly rotates behind player when moving
-local AUTO_FOLLOW_SPEED = 4      -- how fast camera catches up (radians/sec)
-local AUTO_FOLLOW_DELAY = 1.0    -- seconds after manual look before auto-follow resumes
-local MOVE_THRESHOLD = 0.5       -- min speed to trigger auto-follow
+-- How fast camera returns behind player after free-look (deg/sec)
+local RETURN_SPEED = 120
+local RETURN_DELAY = 0.8  -- seconds after releasing right-click before returning
 
 --------------------------------------------------------------------------------
 -- STATE
 --------------------------------------------------------------------------------
 
 local distance = DEFAULT_DISTANCE
-local yaw = 0       -- horizontal angle (degrees)
+local yaw = 0        -- camera yaw offset from character facing (0 = directly behind)
 local pitch = DEFAULT_PITCH
-local isManualLook = false       -- player is actively looking with mouse/touch
-local lastManualLookTime = 0     -- when player last touched the camera
-local lastHrpPosition = nil      -- for tracking movement direction
+local isFreeLook = false
+local lastFreeLookTime = 0
 
--- Raycast params for collision
+-- Raycast params
 local rayParams = RaycastParams.new()
 rayParams.FilterType = Enum.RaycastFilterType.Exclude
 
@@ -52,15 +69,15 @@ rayParams.FilterType = Enum.RaycastFilterType.Exclude
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
 	if gameProcessed then return end
 	if input.UserInputType == Enum.UserInputType.MouseButton2 then
-		isManualLook = true
+		isFreeLook = true
 		UserInputService.MouseBehavior = Enum.MouseBehavior.LockCurrentPosition
 	end
 end)
 
 UserInputService.InputEnded:Connect(function(input)
 	if input.UserInputType == Enum.UserInputType.MouseButton2 then
-		isManualLook = false
-		lastManualLookTime = tick()
+		isFreeLook = false
+		lastFreeLookTime = tick()
 		UserInputService.MouseBehavior = Enum.MouseBehavior.Default
 	end
 end)
@@ -70,15 +87,14 @@ UserInputService.InputChanged:Connect(function(input)
 		distance = math.clamp(distance - input.Position.Z * ZOOM_STEP, MIN_DISTANCE, MAX_DISTANCE)
 	end
 
-	if input.UserInputType == Enum.UserInputType.MouseMovement and isManualLook then
-		local delta = input.Delta
-		yaw = yaw - delta.X * SENSITIVITY_X
-		pitch = math.clamp(pitch + delta.Y * SENSITIVITY_Y, MIN_PITCH, MAX_PITCH)
+	if input.UserInputType == Enum.UserInputType.MouseMovement and isFreeLook then
+		yaw = yaw - input.Delta.X * SENSITIVITY_X
+		pitch = math.clamp(pitch + input.Delta.Y * SENSITIVITY_Y, MIN_PITCH, MAX_PITCH)
 	end
 end)
 
 --------------------------------------------------------------------------------
--- INPUT: Touch (single finger = look, pinch = zoom)
+-- INPUT: Touch
 --------------------------------------------------------------------------------
 
 local touchStartPositions = {}
@@ -87,11 +103,8 @@ local touchStartDistance = nil
 UserInputService.TouchStarted:Connect(function(input, gameProcessed)
 	if gameProcessed then return end
 	touchStartPositions[input] = input.Position
-
 	local touches = {}
-	for inp, _ in pairs(touchStartPositions) do
-		table.insert(touches, inp)
-	end
+	for inp, _ in pairs(touchStartPositions) do table.insert(touches, inp) end
 	if #touches == 2 then
 		touchStartDistance = (touches[1].Position - touches[2].Position).Magnitude
 	end
@@ -99,31 +112,25 @@ end)
 
 UserInputService.TouchMoved:Connect(function(input)
 	if not touchStartPositions[input] then return end
-
 	local touches = {}
-	for inp, _ in pairs(touchStartPositions) do
-		table.insert(touches, inp)
-	end
+	for inp, _ in pairs(touchStartPositions) do table.insert(touches, inp) end
 
 	if #touches == 1 then
 		local delta = input.Position - touchStartPositions[input]
 		yaw = yaw - delta.X * 0.3
 		pitch = math.clamp(pitch + delta.Y * 0.2, MIN_PITCH, MAX_PITCH)
 		touchStartPositions[input] = input.Position
-		lastManualLookTime = tick()
+		lastFreeLookTime = tick()
 	elseif #touches == 2 and touchStartDistance then
 		local currentDist = (touches[1].Position - touches[2].Position).Magnitude
-		local scale = touchStartDistance / math.max(currentDist, 1)
-		distance = math.clamp(distance * scale, MIN_DISTANCE, MAX_DISTANCE)
+		distance = math.clamp(distance * (touchStartDistance / math.max(currentDist, 1)), MIN_DISTANCE, MAX_DISTANCE)
 		touchStartDistance = currentDist
 	end
 end)
 
 UserInputService.TouchEnded:Connect(function(input)
 	touchStartPositions[input] = nil
-	if not next(touchStartPositions) then
-		touchStartDistance = nil
-	end
+	if not next(touchStartPositions) then touchStartDistance = nil end
 end)
 
 --------------------------------------------------------------------------------
@@ -138,70 +145,48 @@ RunService.RenderStepped:Connect(function(dt)
 
 	camera.CameraType = Enum.CameraType.Scriptable
 
-	-- Track movement direction for auto-follow
-	local currentPos = hrp.Position
-	local moveDir = nil
-	local moveSpeed = 0
+	-- Get character facing angle (Y rotation)
+	local _, charYaw, _ = hrp.CFrame:ToEulerAnglesYXZ()
+	local charYawDeg = math.deg(charYaw)
 
-	if lastHrpPosition then
-		local delta = Vector3.new(currentPos.X - lastHrpPosition.X, 0, currentPos.Z - lastHrpPosition.Z)
-		moveSpeed = delta.Magnitude / math.max(dt, 0.001)
-		if moveSpeed > MOVE_THRESHOLD then
-			moveDir = delta.Unit
-		end
-	end
-	lastHrpPosition = currentPos
-
-	-- Auto-follow: smoothly rotate camera behind player when moving
-	local timeSinceManual = tick() - lastManualLookTime
-	if not isManualLook and timeSinceManual > AUTO_FOLLOW_DELAY and moveDir then
-		-- Calculate target yaw from movement direction
-		local targetYaw = math.deg(math.atan2(moveDir.X, moveDir.Z))
-
-		-- Smooth rotation towards target (shortest path)
-		local diff = targetYaw - yaw
-		-- Normalize to [-180, 180]
-		while diff > 180 do diff -= 360 end
-		while diff < -180 do diff += 360 end
-
-		-- Lerp speed scales with how fast the player is moving
-		local speedFactor = math.clamp(moveSpeed / 20, 0.3, 1.0)
-		local step = AUTO_FOLLOW_SPEED * speedFactor * dt * 60
-
-		if math.abs(diff) < step then
-			yaw = targetYaw
+	-- Return yaw to 0 (behind character) when not free-looking
+	if not isFreeLook and (tick() - lastFreeLookTime) > RETURN_DELAY then
+		if math.abs(yaw) > 0.5 then
+			local step = RETURN_SPEED * dt
+			if math.abs(yaw) < step then
+				yaw = 0
+			else
+				yaw = yaw - math.sign(yaw) * step
+			end
 		else
-			yaw = yaw + math.sign(diff) * step
+			yaw = 0
 		end
 	end
 
-	-- Target position (character + height offset)
-	local targetPos = hrp.Position + Vector3.new(0, CAMERA_HEIGHT_OFFSET, 0)
-
-	-- Calculate camera position from yaw/pitch/distance
-	local yawRad = math.rad(yaw)
+	-- Final camera angle = character facing + yaw offset + 180° (behind)
+	local cameraYawDeg = charYawDeg + yaw + 180
+	local cameraYawRad = math.rad(cameraYawDeg)
 	local pitchRad = math.rad(pitch)
 	local cosP = math.cos(pitchRad)
 
+	-- Target = character position + height
+	local targetPos = hrp.Position + Vector3.new(0, CAMERA_HEIGHT_OFFSET, 0)
+
+	-- Camera offset from target
 	local offset = Vector3.new(
-		math.sin(yawRad) * cosP * distance,
+		math.sin(cameraYawRad) * cosP * distance,
 		math.sin(pitchRad) * distance,
-		math.cos(yawRad) * cosP * distance
+		math.cos(cameraYawRad) * cosP * distance
 	)
 
 	local desiredPos = targetPos + offset
 
-	-- Collision check: cast ray from target to desired camera position
+	-- Collision
 	rayParams.FilterDescendantsInstances = { character }
-	local direction = desiredPos - targetPos
-	local result = Workspace:Raycast(targetPos, direction, rayParams)
-
-	local finalPos = desiredPos
-	if result then
-		finalPos = result.Position + result.Normal * 0.5
-	end
+	local result = Workspace:Raycast(targetPos, desiredPos - targetPos, rayParams)
+	local finalPos = result and (result.Position + result.Normal * 0.5) or desiredPos
 
 	camera.CFrame = CFrame.lookAt(finalPos, targetPos)
 end)
 
-print("[FreeCam] GTA-style follow camera loaded")
+print("[FreeCam] GTA-style camera loaded")
