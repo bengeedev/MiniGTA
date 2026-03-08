@@ -212,6 +212,147 @@ if selectThemeRemote then
 end
 
 --------------------------------------------------------------------------------
+-- DEBUG HANDLERS (Studio-only on server, client already checks IS_STUDIO)
+--------------------------------------------------------------------------------
+
+local IS_STUDIO = RunService:IsStudio()
+
+-- Teleport to position
+local debugTeleport = Remotes.get("DebugTeleport")
+if debugTeleport then
+	debugTeleport.OnServerEvent:Connect(function(player, position)
+		if not IS_STUDIO then return end
+		local character = player.Character
+		if not character then return end
+		local hrp = character:FindFirstChild("HumanoidRootPart")
+		if hrp then
+			hrp.CFrame = CFrame.new(position)
+			print("[Debug] Teleported", player.Name, "to", position)
+		end
+	end)
+end
+
+-- Reset player to spawn
+local debugReset = Remotes.get("DebugResetPlayer")
+if debugReset then
+	debugReset.OnServerEvent:Connect(function(player)
+		if not IS_STUDIO then return end
+		local character = player.Character
+		if not character then return end
+		local hrp = character:FindFirstChild("HumanoidRootPart")
+		if hrp then
+			hrp.CFrame = CFrame.new(GTAConfig.SPAWN_POSITION)
+		end
+	end)
+end
+
+-- Spawn vehicle near player
+local debugSpawnVehicle = Remotes.get("DebugSpawnVehicle")
+if debugSpawnVehicle then
+	debugSpawnVehicle.OnServerEvent:Connect(function(player, templateName)
+		if not IS_STUDIO then return end
+		local templates = ReplicatedStorage:FindFirstChild("VehicleTemplates")
+		if not templates then return end
+		local template = templates:FindFirstChild(templateName)
+		if not template then
+			-- Try with _1 suffix
+			template = templates:FindFirstChild(templateName .. "_1")
+		end
+		if not template then
+			warn("[Debug] Vehicle template not found:", templateName)
+			return
+		end
+
+		local character = player.Character
+		if not character then return end
+		local hrp = character:FindFirstChild("HumanoidRootPart")
+		if not hrp then return end
+
+		local clone = template:Clone()
+		local spawnPos = hrp.Position + hrp.CFrame.LookVector * 20
+		clone:PivotTo(CFrame.new(spawnPos.X, GTAConfig.GROUND_Y + 2, spawnPos.Z))
+		clone.Parent = vehicleFolder
+		print("[Debug] Spawned", templateName, "near", player.Name)
+	end)
+end
+
+-- Toggle god mode
+local debugGodMode = Remotes.get("DebugToggleGodMode")
+if debugGodMode then
+	debugGodMode.OnServerEvent:Connect(function(player, enabled)
+		if not IS_STUDIO then return end
+		if not playerState[player] then return end
+		playerState[player].godMode = enabled
+		local character = player.Character
+		if character then
+			local humanoid = character:FindFirstChildOfClass("Humanoid")
+			if humanoid then
+				if enabled then
+					humanoid.MaxHealth = math.huge
+					humanoid.Health = math.huge
+				else
+					humanoid.MaxHealth = 100
+					humanoid.Health = 100
+				end
+			end
+		end
+		print("[Debug] God mode", enabled and "ON" or "OFF", "for", player.Name)
+	end)
+end
+
+-- Set environment
+local debugSetEnv = Remotes.get("DebugSetEnvironment")
+if debugSetEnv then
+	debugSetEnv.OnServerEvent:Connect(function(player, envName)
+		if not IS_STUDIO then return end
+		local envRemote = Remotes.get("EnvironmentChanged")
+		if envRemote then
+			envRemote:FireClient(player, { envName = envName, transition = true })
+		end
+	end)
+end
+
+-- Set theme
+local debugSetTheme = Remotes.get("DebugSetTheme")
+if debugSetTheme then
+	debugSetTheme.OnServerEvent:Connect(function(player, themeName)
+		if not IS_STUDIO then return end
+		if not playerState[player] then return end
+		playerState[player].selectedTheme = themeName
+		local themeRemote = Remotes.get("ThemeChanged")
+		if themeRemote then
+			themeRemote:FireClient(player, themeName)
+		end
+	end)
+end
+
+-- Set time of day
+local debugSetTime = Remotes.get("DebugSetTime")
+if debugSetTime then
+	debugSetTime.OnServerEvent:Connect(function(player, clockTime)
+		if not IS_STUDIO then return end
+		local Lighting = game:GetService("Lighting")
+		Lighting.ClockTime = clockTime
+		print("[Debug] ClockTime set to", clockTime)
+	end)
+end
+
+-- Give coins
+local debugGiveCoins = Remotes.get("DebugGiveCoins")
+if debugGiveCoins then
+	debugGiveCoins.OnServerEvent:Connect(function(player, amount)
+		if not IS_STUDIO then return end
+		if not playerState[player] then return end
+		playerState[player].coins = (playerState[player].coins or 0) + amount
+		local coinsRemote = Remotes.get("CoinsUpdated")
+		if coinsRemote then
+			coinsRemote:FireClient(player, playerState[player].coins)
+		end
+		print("[Debug] Gave", amount, "coins to", player.Name, "→ total:", playerState[player].coins)
+	end)
+end
+
+--------------------------------------------------------------------------------
 -- SAVE ON CLOSE
 --------------------------------------------------------------------------------
 

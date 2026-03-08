@@ -1,5 +1,6 @@
 {
   "name": "MiniGTA",
+  "servePort": 34874,
   "tree": {
     "$className": "DataModel",
 

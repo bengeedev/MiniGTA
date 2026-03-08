@@ -40,6 +40,17 @@ Remotes.EVENTS = {
 
 	-- Sprint
 	"SprintToggle",        -- Client -> Server: sprint state changed
+
+	-- Debug (Studio-only)
+	"DebugTeleport",       -- Client -> Server: teleport to district
+	"DebugSpawnVehicle",   -- Client -> Server: spawn vehicle template near player
+	"DebugToggleGodMode",  -- Client -> Server: toggle invincibility
+	"DebugSetEnvironment", -- Client -> Server: set environment preset
+	"DebugSetTheme",       -- Client -> Server: set visual theme
+	"DebugSetTime",        -- Client -> Server: set ClockTime
+	"DebugToggleNoclip",   -- Client -> Server: toggle noclip fly mode
+	"DebugResetPlayer",    -- Client -> Server: teleport to spawn
+	"DebugGiveCoins",      -- Client -> Server: add coins for testing
 }
 
 -- Get or create the Remotes folder
