@@ -98,26 +98,74 @@ local function drawLaneLine(parent, u1, v1, u2, v2, isVertical, color, thickness
 	return line
 end
 
--- Draw all lanes from GTAConfig using lane type colors
+-- Draw all lanes from GTAConfig, segmented around compound zones
 local function drawAllLanes(parent, _isDetailed)
-	-- H-lanes
+	local compoundRects = GTAConfig.getCompoundRects()
+
+	-- H-lanes (segmented: skip X ranges inside compound zones)
 	for _, lane in ipairs(GTAConfig.H_LANES) do
-		local _, v = worldToScale(0, GTAConfig.getRowEdgeZ(lane.row))
+		local z = GTAConfig.getRowEdgeZ(lane.row)
 		local def = GTAConfig.LANE_TYPES[lane.type]
 		local color = def and def.mapColor or Color3.fromRGB(200, 200, 190)
 		local thick = def and def.mapThickness or 3
 		if thick == 0 then thick = 6 end
-		drawLaneLine(parent, 0, v, 1, v, false, color, thick)
+
+		local skipRanges = {}
+		for _, r in ipairs(compoundRects) do
+			if z > r.z1 and z < r.z2 then
+				table.insert(skipRanges, { r.x1, r.x2 })
+			end
+		end
+		table.sort(skipRanges, function(a, b) return a[1] < b[1] end)
+
+		local curX = ORIGIN_X
+		local endX = ORIGIN_X + CITY_W
+		for _, skip in ipairs(skipRanges) do
+			if curX < skip[1] then
+				local u1, v = worldToScale(curX, z)
+				local u2, _ = worldToScale(skip[1], z)
+				drawLaneLine(parent, u1, v, u2, v, false, color, thick)
+			end
+			curX = math.max(curX, skip[2])
+		end
+		if curX < endX then
+			local u1, v = worldToScale(curX, z)
+			local u2, _ = worldToScale(endX, z)
+			drawLaneLine(parent, u1, v, u2, v, false, color, thick)
+		end
 	end
 
-	-- V-lanes
+	-- V-lanes (segmented: skip Z ranges inside compound zones)
 	for _, lane in ipairs(GTAConfig.V_LANES) do
-		local u, _ = worldToScale(GTAConfig.getColEdgeX(lane.col), 0)
+		local x = GTAConfig.getColEdgeX(lane.col)
 		local def = GTAConfig.LANE_TYPES[lane.type]
 		local color = def and def.mapColor or Color3.fromRGB(200, 200, 190)
 		local thick = def and def.mapThickness or 3
 		if thick == 0 then thick = 6 end
-		drawLaneLine(parent, u, 0, u, 1, true, color, thick)
+
+		local skipRanges = {}
+		for _, r in ipairs(compoundRects) do
+			if x > r.x1 and x < r.x2 then
+				table.insert(skipRanges, { r.z1, r.z2 })
+			end
+		end
+		table.sort(skipRanges, function(a, b) return a[1] < b[1] end)
+
+		local curZ = ORIGIN_Z
+		local endZ = ORIGIN_Z + CITY_D
+		for _, skip in ipairs(skipRanges) do
+			if curZ < skip[1] then
+				local u, v1 = worldToScale(x, curZ)
+				local _, v2 = worldToScale(x, skip[1])
+				drawLaneLine(parent, u, v1, u, v2, true, color, thick)
+			end
+			curZ = math.max(curZ, skip[2])
+		end
+		if curZ < endZ then
+			local u, v1 = worldToScale(x, curZ)
+			local _, v2 = worldToScale(x, endZ)
+			drawLaneLine(parent, u, v1, u, v2, true, color, thick)
+		end
 	end
 end
 

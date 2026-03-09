@@ -51,18 +51,6 @@ local DISTRICT_TERRAIN = {
 	space        = Enum.Material.Basalt,
 }
 
--- Compound zones: no internal roads, one big open block
-local COMPOUND = {
-	airport = true,
-	military = true,
-	nuclear = true,
-	power_plant = true,
-	prison = true,
-	space = true,
-	water_plant = true,
-	beach = true,
-}
-
 --------------------------------------------------------------------------------
 -- HELPERS
 --------------------------------------------------------------------------------
@@ -90,74 +78,16 @@ local function getDistrictAt(worldX, worldZ)
 	return GTAConfig.getDistrict(col, row)
 end
 
---------------------------------------------------------------------------------
--- COMPOUND RECTANGLES
--- Each compound district gets one big fill from boundary-lane inner edges.
--- Boundary lanes = the V-lanes/H-lanes at the district edges.
---------------------------------------------------------------------------------
-
-local compoundRects = {}
-
-local function computeCompoundRects()
-	local hLanes = GTAConfig.H_LANES
-	local vLanes = GTAConfig.V_LANES
-
-	for _, d in ipairs(GTAConfig.DISTRICTS) do
-		if not COMPOUND[d.name] then continue end
-
-		-- Find boundary V-lanes (left: last V-lane at or before colMin, right: first V-lane at or after colMax+1)
-		local leftVCol, leftVW, rightVCol, rightVW = nil, 0, nil, 0
-		for _, v in ipairs(vLanes) do
-			if v.col <= d.colMin then
-				leftVCol = v.col
-				leftVW = getLaneWidth(v.type)
-			end
-		end
-		for _, v in ipairs(vLanes) do
-			if v.col >= d.colMax + 1 and not rightVCol then
-				rightVCol = v.col
-				rightVW = getLaneWidth(v.type)
-			end
-		end
-
-		-- Find boundary H-lanes (top: last H-lane at or before rowMin, bottom: first H-lane at or after rowMax+1)
-		local topHRow, topHW, botHRow, botHW = nil, 0, nil, 0
-		for _, h in ipairs(hLanes) do
-			if h.row <= d.rowMin then
-				topHRow = h.row
-				topHW = getLaneWidth(h.type)
-			end
-		end
-		for _, h in ipairs(hLanes) do
-			if h.row >= d.rowMax + 1 and not botHRow then
-				botHRow = h.row
-				botHW = getLaneWidth(h.type)
-			end
-		end
-
-		if not (leftVCol and rightVCol and topHRow and botHRow) then continue end
-
-		local rect = {
-			x1 = GTAConfig.getColEdgeX(leftVCol) + leftVW / 2,
-			x2 = GTAConfig.getColEdgeX(rightVCol) - rightVW / 2,
-			z1 = GTAConfig.getRowEdgeZ(topHRow) + topHW / 2,
-			z2 = GTAConfig.getRowEdgeZ(botHRow) - botHW / 2,
-			material = DISTRICT_TERRAIN[d.name] or Enum.Material.Grass,
-		}
-
-		if rect.x2 > rect.x1 and rect.z2 > rect.z1 then
-			table.insert(compoundRects, rect)
-		end
+-- Compound rects + material from district terrain config
+local function getCompoundRectsWithMaterial()
+	local rects = {}
+	for _, r in ipairs(GTAConfig.getCompoundRects()) do
+		table.insert(rects, {
+			x1 = r.x1, x2 = r.x2, z1 = r.z1, z2 = r.z2,
+			material = DISTRICT_TERRAIN[r.name] or Enum.Material.Grass,
+		})
 	end
-end
-
-local function isInsideCompound(cx, cz)
-	for _, r in ipairs(compoundRects) do
-		if cx > r.x1 and cx < r.x2 and cz > r.z1 and cz < r.z2 then
-			return true
-		end
-	end
-	return false
+	return rects
 end
 
 --------------------------------------------------------------------------------
@@ -205,10 +135,13 @@ local function buildSurface()
 	local cityLeft  = ORIGIN_X - 30
 	local cityRight = ORIGIN_X + CITY_W + 30
 
+	local cRects = getCompoundRectsWithMaterial()
+	local sharedRects = GTAConfig.getCompoundRects()
+
 	--------------------------------------------------------------------
 	-- A. COMPOUND ZONES (big open blocks, no roads inside)
 	--------------------------------------------------------------------
-	for _, r in ipairs(compoundRects) do
+	for _, r in ipairs(cRects) do
 		fillSurface((r.x1 + r.x2) / 2, (r.z1 + r.z2) / 2, r.x2 - r.x1, r.z2 - r.z1, r.material)
 		blockCount += 1
 	end
@@ -223,7 +156,7 @@ local function buildSurface()
 
 		-- Collect X ranges to skip (compound zones that this H-lane passes through)
 		local skipRanges = {}
-		for _, r in ipairs(compoundRects) do
+		for _, r in ipairs(sharedRects) do
 			if z > r.z1 and z < r.z2 then
 				table.insert(skipRanges, { r.x1, r.x2 })
 			end
@@ -262,7 +195,7 @@ local function buildSurface()
 		-- V-lane segments (skip if inside compound)
 		for _, v in ipairs(vLanes) do
 			local x = GTAConfig.getColEdgeX(v.col)
-			if not isInsideCompound(x, bandCZ) then
+			if not GTAConfig.isInsideCompound(x, bandCZ) then
 				fillSurface(x, bandCZ, getLaneWidth(v.type), bandD, Enum.Material.Asphalt)
 				laneCount += 1
 			end
@@ -278,7 +211,7 @@ local function buildSurface()
 			if blockW <= 0 then continue end
 			local blockCX = (leftX + rightX) / 2
 
-			if not isInsideCompound(blockCX, bandCZ) then
+			if not GTAConfig.isInsideCompound(blockCX, bandCZ) then
 				local dist = getDistrictAt(blockCX, bandCZ)
 				local mat = DISTRICT_TERRAIN[dist] or Enum.Material.Grass
 				fillSurface(blockCX, bandCZ, blockW, bandD, mat)
@@ -309,7 +242,7 @@ local function buildRailwayTracks()
 		-- Collect all zones to skip: compound zones + road crossings
 		local skipRanges = {}
 
-		for _, r in ipairs(compoundRects) do
+		for _, r in ipairs(GTAConfig.getCompoundRects()) do
 			if z > r.z1 and z < r.z2 then
 				table.insert(skipRanges, { x1 = r.x1, x2 = r.x2, crossing = false })
 			end
@@ -320,7 +253,7 @@ local function buildRailwayTracks()
 		for _, v in ipairs(vLanes) do
 			local vx = GTAConfig.getColEdgeX(v.col)
 			local vw = getLaneWidth(v.type)
-			if not isInsideCompound(vx, z) then
+			if not GTAConfig.isInsideCompound(vx, z) then
 				table.insert(crossings, { x = vx, width = vw })
 				table.insert(skipRanges, { x1 = vx - vw / 2, x2 = vx + vw / 2, crossing = true })
 			end
@@ -373,7 +306,6 @@ function CityBuilder.build(decorFolderRef, vehicleFolderRef, npcFolderRef)
 
 	print("[CityBuilder] === Building city ===")
 
-	computeCompoundRects()
 	buildFoundation()
 	buildSurface()
 	buildRailwayTracks()

@@ -323,6 +323,95 @@ GTAConfig.DISTRICT_VEHICLES = {
 }
 
 --------------------------------------------------------------------------------
+-- COMPOUND ZONES (no internal roads — one big open block)
+--------------------------------------------------------------------------------
+
+GTAConfig.COMPOUND_DISTRICTS = {
+	airport = true,
+	military = true,
+	nuclear = true,
+	power_plant = true,
+	prison = true,
+	space = true,
+	water_plant = true,
+	beach = true,
+}
+
+-- Compound rectangles: world-space rects computed from boundary lane inner edges.
+-- Lazy-computed and cached. Used by both server (CityBuilder) and client (MapUI).
+local _compoundRects = nil
+
+function GTAConfig.getCompoundRects()
+	if _compoundRects then return _compoundRects end
+	_compoundRects = {}
+
+	local hLanes = GTAConfig.H_LANES
+	local vLanes = GTAConfig.V_LANES
+
+	local function laneWidth(laneType)
+		local def = GTAConfig.LANE_TYPES[laneType]
+		return def and def.width or GTAConfig.STREET_WIDTH
+	end
+
+	for _, d in ipairs(GTAConfig.DISTRICTS) do
+		if not GTAConfig.COMPOUND_DISTRICTS[d.name] then continue end
+
+		local leftVCol, leftVW, rightVCol, rightVW = nil, 0, nil, 0
+		for _, v in ipairs(vLanes) do
+			if v.col <= d.colMin then
+				leftVCol = v.col
+				leftVW = laneWidth(v.type)
+			end
+		end
+		for _, v in ipairs(vLanes) do
+			if v.col >= d.colMax + 1 and not rightVCol then
+				rightVCol = v.col
+				rightVW = laneWidth(v.type)
+			end
+		end
+
+		local topHRow, topHW, botHRow, botHW = nil, 0, nil, 0
+		for _, h in ipairs(hLanes) do
+			if h.row <= d.rowMin then
+				topHRow = h.row
+				topHW = laneWidth(h.type)
+			end
+		end
+		for _, h in ipairs(hLanes) do
+			if h.row >= d.rowMax + 1 and not botHRow then
+				botHRow = h.row
+				botHW = laneWidth(h.type)
+			end
+		end
+
+		if not (leftVCol and rightVCol and topHRow and botHRow) then continue end
+
+		local rect = {
+			x1 = GTAConfig.getColEdgeX(leftVCol) + leftVW / 2,
+			x2 = GTAConfig.getColEdgeX(rightVCol) - rightVW / 2,
+			z1 = GTAConfig.getRowEdgeZ(topHRow) + topHW / 2,
+			z2 = GTAConfig.getRowEdgeZ(botHRow) - botHW / 2,
+			name = d.name,
+		}
+
+		if rect.x2 > rect.x1 and rect.z2 > rect.z1 then
+			table.insert(_compoundRects, rect)
+		end
+	end
+
+	return _compoundRects
+end
+
+function GTAConfig.isInsideCompound(worldX: number, worldZ: number): boolean
+	for _, r in ipairs(GTAConfig.getCompoundRects()) do
+		if worldX > r.x1 and worldX < r.x2 and worldZ > r.z1 and worldZ < r.z2 then
+			return true
+		end
+	end
+	return false
+end
+
+--------------------------------------------------------------------------------
 -- HELPERS
 --------------------------------------------------------------------------------
 
