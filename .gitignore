@@ -2,5 +2,8 @@
 *.rbxl
 *.rbxm
 *.rbxmx
+*.rbxl.lock
 roblox.lock
 sourcemap.json
+.DS_Store
+**/.DS_Store

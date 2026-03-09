@@ -1,6 +1,6 @@
 -- MapUI.client.luau
 -- Minimap (bottom-left, zoomed + scrolls with player) + Full Map (press M).
--- Reads layout from GTAConfig.
+-- Lane-zone architecture: reads lane definitions from GTAConfig for all drawing.
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -42,8 +42,7 @@ screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 screenGui.IgnoreGuiInset = true
 
 --------------------------------------------------------------------------------
--- DRAW FUNCTIONS (reusable for both maps)
--- isDetailed = true → add labels, landmarks, stations
+-- DRAW FUNCTIONS
 --------------------------------------------------------------------------------
 
 local function drawDistricts(parent, isDetailed)
@@ -78,193 +77,43 @@ local function drawDistricts(parent, isDetailed)
 	end
 end
 
-local function drawRoads(parent)
-	local roadColor = Color3.fromRGB(200, 200, 190)
-	local hwColor   = Color3.fromRGB(240, 210, 80)
+-- Draw a road line on the map
+local function drawRoadLine(parent, u1, v1, u2, v2, isVertical, isHighway)
+	local thickness = isHighway and 4 or 3
+	local color = isHighway and Color3.fromRGB(240, 210, 80) or Color3.fromRGB(200, 200, 190)
 
-	-- Draw roads at district boundaries (major avenues only)
-	local drawnH = {}  -- avoid duplicate horizontal edges
-	local drawnV = {}  -- avoid duplicate vertical edges
-
-	for _, d in ipairs(GTAConfig.DISTRICTS) do
-		local u1, v1 = worldToScale(ORIGIN_X + d.colMin * CELL, ORIGIN_Z + d.rowMin * CELL)
-		local u2, v2 = worldToScale(ORIGIN_X + (d.colMax + 1) * CELL, ORIGIN_Z + (d.rowMax + 1) * CELL)
-
-		-- Top edge
-		local hKey1 = d.rowMin .. "_" .. d.colMin .. "_" .. d.colMax
-		if not drawnH[tostring(d.rowMin)] then
-			local isHW = (d.rowMin == 0)
-			local line = Instance.new("Frame")
-			line.AnchorPoint = Vector2.new(0, 0.5)
-			line.Position = UDim2.new(0, 0, v1, 0)
-			line.Size = UDim2.new(1, 0, 0, isHW and 4 or 2)
-			line.BackgroundColor3 = isHW and hwColor or roadColor
-			line.BackgroundTransparency = isHW and 0 or 0.2
-			line.BorderSizePixel = 0
-			line.ZIndex = 2
-			line.Parent = parent
-			drawnH[tostring(d.rowMin)] = true
-		end
-
-		-- Bottom edge
-		if not drawnH[tostring(d.rowMax + 1)] then
-			local isHW = (d.rowMax + 1 == ROWS)
-			local line = Instance.new("Frame")
-			line.AnchorPoint = Vector2.new(0, 0.5)
-			line.Position = UDim2.new(0, 0, v2, 0)
-			line.Size = UDim2.new(1, 0, 0, isHW and 4 or 2)
-			line.BackgroundColor3 = isHW and hwColor or roadColor
-			line.BackgroundTransparency = isHW and 0 or 0.2
-			line.BorderSizePixel = 0
-			line.ZIndex = 2
-			line.Parent = parent
-			drawnH[tostring(d.rowMax + 1)] = true
-		end
-
-		-- Left edge (partial — only spans this district's row range)
-		local vKeyL = d.colMin .. "_" .. d.rowMin .. "_" .. d.rowMax
-		if not drawnV[vKeyL] then
-			local isHW = (d.colMin == 0)
-			local line = Instance.new("Frame")
-			line.AnchorPoint = Vector2.new(0.5, 0)
-			line.Position = UDim2.new(u1, 0, v1, 0)
-			line.Size = UDim2.new(0, isHW and 4 or 2, v2 - v1, 0)
-			line.BackgroundColor3 = isHW and hwColor or roadColor
-			line.BackgroundTransparency = isHW and 0 or 0.2
-			line.BorderSizePixel = 0
-			line.ZIndex = 2
-			line.Parent = parent
-			drawnV[vKeyL] = true
-		end
-
-		-- Right edge (partial)
-		local vKeyR = (d.colMax + 1) .. "_" .. d.rowMin .. "_" .. d.rowMax
-		if not drawnV[vKeyR] then
-			local isHW = (d.colMax + 1 == COLS)
-			local line = Instance.new("Frame")
-			line.AnchorPoint = Vector2.new(0.5, 0)
-			line.Position = UDim2.new(u2, 0, v1, 0)
-			line.Size = UDim2.new(0, isHW and 4 or 2, v2 - v1, 0)
-			line.BackgroundColor3 = isHW and hwColor or roadColor
-			line.BackgroundTransparency = isHW and 0 or 0.2
-			line.BorderSizePixel = 0
-			line.ZIndex = 2
-			line.Parent = parent
-			drawnV[vKeyR] = true
-		end
+	local line = Instance.new("Frame")
+	line.Name = "Road"
+	if isVertical then
+		line.AnchorPoint = Vector2.new(0.5, 0)
+		line.Position = UDim2.new(u1, 0, v1, 0)
+		line.Size = UDim2.new(0, thickness, v2 - v1, 0)
+	else
+		line.AnchorPoint = Vector2.new(0, 0.5)
+		line.Position = UDim2.new(u1, 0, v1, 0)
+		line.Size = UDim2.new(u2 - u1, 0, 0, thickness)
 	end
+	line.BackgroundColor3 = color
+	line.BackgroundTransparency = 0
+	line.BorderSizePixel = 0
+	line.ZIndex = 2
+	line.Parent = parent
+	return line
 end
 
-local function drawRailway(parent)
-	local u, _ = worldToScale(ORIGIN_X + 4 * CELL, 0)
-
-	local rail = Instance.new("Frame")
-	rail.Name = "Railway"
-	rail.AnchorPoint = Vector2.new(0.5, 0)
-	rail.Position = UDim2.new(u, 0, 0, 0)
-	rail.Size = UDim2.new(0, 5, 1, 0)
-	rail.BackgroundColor3 = Color3.fromRGB(160, 90, 40)
-	rail.BorderSizePixel = 0
-	rail.ZIndex = 3
-	rail.Parent = parent
-
-	-- Cross-ties
-	for i = 0, 40 do
-		local tie = Instance.new("Frame")
-		tie.Size = UDim2.new(0, 9, 0, 1)
-		tie.AnchorPoint = Vector2.new(0.5, 0)
-		tie.Position = UDim2.new(0.5, 0, i / 41, 0)
-		tie.BackgroundColor3 = Color3.fromRGB(120, 70, 30)
-		tie.BorderSizePixel = 0
-		tie.ZIndex = 3
-		tie.Parent = rail
+-- Draw all roads from GTAConfig (Phase 1: all lanes as asphalt roads)
+local function drawAllLanes(parent, _isDetailed)
+	-- H-lanes
+	for _, lane in ipairs(GTAConfig.H_LANES) do
+		local _, v = worldToScale(0, GTAConfig.getRowEdgeZ(lane.row))
+		drawRoadLine(parent, 0, v, 1, v, false, lane.type == "highway")
 	end
-end
 
-local function drawMetro(parent, isDetailed)
-	local mColor = Color3.fromRGB(0, 200, 255)
-
-	-- E-W line at row 4.5 center (through central band)
-	local _, vEW = worldToScale(0, ORIGIN_Z + 4.5 * CELL + CELL / 2)
-	local ew = Instance.new("Frame")
-	ew.Name = "MetroEW"
-	ew.AnchorPoint = Vector2.new(0, 0.5)
-	ew.Position = UDim2.new(0, 0, vEW, 0)
-	ew.Size = UDim2.new(1, 0, 0, 3)
-	ew.BackgroundColor3 = mColor
-	ew.BorderSizePixel = 0
-	ew.ZIndex = 3
-	ew.Parent = parent
-
-	-- N-S line at col 6 (through downtown)
-	local uNS, _ = worldToScale(ORIGIN_X + 6 * CELL, 0)
-	local ns = Instance.new("Frame")
-	ns.Name = "MetroNS"
-	ns.AnchorPoint = Vector2.new(0.5, 0)
-	ns.Position = UDim2.new(uNS, 0, 0, 0)
-	ns.Size = UDim2.new(0, 3, 1, 0)
-	ns.BackgroundColor3 = mColor
-	ns.BorderSizePixel = 0
-	ns.ZIndex = 3
-	ns.Parent = parent
-
-	-- Stations
-	if isDetailed then
-		local stations = {
-			{ col = 2,    row = 4.5, name = "Airport" },
-			{ col = 5,    row = 4.5, name = "Downtown W" },
-			{ col = 8,    row = 4.5, name = "Government" },
-			{ col = 11,   row = 4.5, name = "Residential" },
-			{ col = 6,    row = 1.5, name = "Industrial" },
-			{ col = 6,    row = 4.5, name = "Hub" },
-			{ col = 6,    row = 8,   name = "Waterfront" },
-		}
-		for _, s in ipairs(stations) do
-			local su, sv = worldToScale(ORIGIN_X + s.col * CELL + CELL / 2, ORIGIN_Z + s.row * CELL + CELL / 2)
-			local dot = Instance.new("Frame")
-			dot.Name = "Stn_" .. s.name
-			dot.AnchorPoint = Vector2.new(0.5, 0.5)
-			dot.Position = UDim2.new(su, 0, sv, 0)
-			dot.Size = UDim2.new(0, 8, 0, 8)
-			dot.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-			dot.BorderSizePixel = 0
-			dot.ZIndex = 4
-			dot.Parent = parent
-
-			local dc = Instance.new("UICorner")
-			dc.CornerRadius = UDim.new(1, 0)
-			dc.Parent = dot
-
-			local lbl = Instance.new("TextLabel")
-			lbl.Size = UDim2.new(0, 60, 0, 12)
-			lbl.Position = UDim2.new(1, 4, 0.5, -6)
-			lbl.BackgroundTransparency = 1
-			lbl.Text = s.name
-			lbl.TextColor3 = mColor
-			lbl.Font = Enum.Font.GothamBold
-			lbl.TextSize = 9
-			lbl.TextXAlignment = Enum.TextXAlignment.Left
-			lbl.ZIndex = 5
-			lbl.Parent = dot
-		end
+	-- V-lanes (full length)
+	for _, lane in ipairs(GTAConfig.V_LANES) do
+		local u, _ = worldToScale(GTAConfig.getColEdgeX(lane.col), 0)
+		drawRoadLine(parent, u, 0, u, 1, true, lane.type == "highway")
 	end
-end
-
-local function drawWaterChannel(parent)
-	local chanZ = ORIGIN_Z + GTAConfig.WATER_CHANNEL_Z_ROW * CELL
-	local chanW = GTAConfig.WATER_CHANNEL_WIDTH
-	local _, v1 = worldToScale(0, chanZ - chanW / 2)
-	local _, v2 = worldToScale(0, chanZ + chanW / 2)
-
-	local w = Instance.new("Frame")
-	w.Name = "WaterChannel"
-	w.Position = UDim2.new(0, 0, v1, 0)
-	w.Size = UDim2.new(1, 0, v2 - v1, 0)
-	w.BackgroundColor3 = Color3.fromRGB(40, 130, 210)
-	w.BackgroundTransparency = 0.25
-	w.BorderSizePixel = 0
-	w.ZIndex = 2
-	w.Parent = parent
 end
 
 local function drawLandmarks(parent)
@@ -396,18 +245,14 @@ title.Parent = fullMapOverlay
 
 -- Draw full map content
 drawDistricts(fullMap, true)
-drawRoads(fullMap)
-drawRailway(fullMap)
-drawMetro(fullMap, true)
-drawWaterChannel(fullMap)
+drawAllLanes(fullMap, true)
 drawLandmarks(fullMap)
 local fullDot, fullArrow = createPlayerDot(fullMap, 10)
 
--- Legend
+-- Legend — auto-generated from LANE_TYPES
 local legend = Instance.new("Frame")
 legend.AnchorPoint = Vector2.new(1, 1)
 legend.Position = UDim2.new(1, -8, 1, -8)
-legend.Size = UDim2.new(0, 110, 0, 95)
 legend.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 legend.BackgroundTransparency = 0.4
 legend.BorderSizePixel = 0
@@ -415,15 +260,16 @@ legend.ZIndex = 8
 legend.Parent = fullMap
 Instance.new("UICorner", legend).CornerRadius = UDim.new(0, 4)
 
-local legendData = {
+-- Build legend entries (Phase 1: roads only)
+local legendEntries = {
 	{ Color3.fromRGB(240, 210, 80), "Highway" },
 	{ Color3.fromRGB(200, 200, 190), "Road" },
-	{ Color3.fromRGB(160, 90, 40), "Railway" },
-	{ Color3.fromRGB(0, 200, 255), "Metro" },
-	{ Color3.fromRGB(40, 130, 210), "Water" },
 	{ Color3.fromRGB(255, 255, 50), "You" },
 }
-for i, item in ipairs(legendData) do
+
+legend.Size = UDim2.new(0, 110, 0, 4 + #legendEntries * 14)
+
+for i, item in ipairs(legendEntries) do
 	local sw = Instance.new("Frame")
 	sw.Size = UDim2.new(0, 10, 0, 10)
 	sw.Position = UDim2.new(0, 8, 0, 4 + (i - 1) * 14)
@@ -450,7 +296,7 @@ end
 --------------------------------------------------------------------------------
 
 local MINI_SIZE = 200
-local MINI_ZOOM = 3.5  -- how many times zoomed in vs full map
+local MINI_ZOOM = 3.5
 
 local miniFrame = Instance.new("Frame")
 miniFrame.Name = "Minimap"
@@ -480,10 +326,7 @@ miniContent.Parent = miniFrame
 
 -- Draw mini map content (no labels — too small)
 drawDistricts(miniContent, false)
-drawRoads(miniContent)
-drawRailway(miniContent)
-drawMetro(miniContent, false)
-drawWaterChannel(miniContent)
+drawAllLanes(miniContent, false)
 
 -- Player dot stays fixed at center of minimap viewport
 local miniDot, miniArrow = createPlayerDot(miniFrame, 12)
@@ -501,10 +344,8 @@ local function miniCross(sizeU, sizeV, posU, posV)
 	c.ZIndex = 9
 	c.Parent = miniFrame
 end
-miniCross(0, 1, 0.5, 0.5)  -- vertical hairline
-miniCross(1, 0, 0.5, 0.5)  -- horizontal hairline (1px via 0 scale)
--- Make them 1px
-local ch1 = miniFrame:FindFirstChild("") -- skip, the above already works as lines
+miniCross(0, 1, 0.5, 0.5)
+miniCross(1, 0, 0.5, 0.5)
 
 -- District name label above minimap
 local miniLabel = Instance.new("TextLabel")
@@ -558,10 +399,8 @@ RunService.Heartbeat:Connect(function()
 	fullArrow.Rotation = angle
 
 	-- Minimap: scroll content so player is centered in viewport
-	-- Player pixel position in content
 	local px = u * contentW
 	local pz = v * contentH
-	-- Offset content so player is at center of MINI_SIZE viewport
 	miniContent.Position = UDim2.new(0, math.floor(MINI_SIZE / 2 - px), 0, math.floor(MINI_SIZE / 2 - pz))
 	miniArrow.Rotation = angle
 
