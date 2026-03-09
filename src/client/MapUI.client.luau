@@ -82,38 +82,76 @@ local function drawRoads(parent)
 	local roadColor = Color3.fromRGB(200, 200, 190)
 	local hwColor   = Color3.fromRGB(240, 210, 80)
 
-	-- Vertical roads
-	for col = 0, COLS do
-		local u, _ = worldToScale(ORIGIN_X + col * CELL, 0)
-		local isHW = (col == 0 or col == COLS)
+	-- Draw roads at district boundaries (major avenues only)
+	local drawnH = {}  -- avoid duplicate horizontal edges
+	local drawnV = {}  -- avoid duplicate vertical edges
 
-		local line = Instance.new("Frame")
-		line.Name = "VR" .. col
-		line.AnchorPoint = Vector2.new(0.5, 0)
-		line.Position = UDim2.new(u, 0, 0, 0)
-		line.Size = UDim2.new(0, isHW and 4 or 2, 1, 0)
-		line.BackgroundColor3 = isHW and hwColor or roadColor
-		line.BackgroundTransparency = isHW and 0 or 0.3
-		line.BorderSizePixel = 0
-		line.ZIndex = 2
-		line.Parent = parent
-	end
+	for _, d in ipairs(GTAConfig.DISTRICTS) do
+		local u1, v1 = worldToScale(ORIGIN_X + d.colMin * CELL, ORIGIN_Z + d.rowMin * CELL)
+		local u2, v2 = worldToScale(ORIGIN_X + (d.colMax + 1) * CELL, ORIGIN_Z + (d.rowMax + 1) * CELL)
 
-	-- Horizontal roads
-	for row = 0, ROWS do
-		local _, v = worldToScale(0, ORIGIN_Z + row * CELL)
-		local isHW = (row == 0 or row == ROWS)
+		-- Top edge
+		local hKey1 = d.rowMin .. "_" .. d.colMin .. "_" .. d.colMax
+		if not drawnH[tostring(d.rowMin)] then
+			local isHW = (d.rowMin == 0)
+			local line = Instance.new("Frame")
+			line.AnchorPoint = Vector2.new(0, 0.5)
+			line.Position = UDim2.new(0, 0, v1, 0)
+			line.Size = UDim2.new(1, 0, 0, isHW and 4 or 2)
+			line.BackgroundColor3 = isHW and hwColor or roadColor
+			line.BackgroundTransparency = isHW and 0 or 0.2
+			line.BorderSizePixel = 0
+			line.ZIndex = 2
+			line.Parent = parent
+			drawnH[tostring(d.rowMin)] = true
+		end
 
-		local line = Instance.new("Frame")
-		line.Name = "HR" .. row
-		line.AnchorPoint = Vector2.new(0, 0.5)
-		line.Position = UDim2.new(0, 0, v, 0)
-		line.Size = UDim2.new(1, 0, 0, isHW and 4 or 2)
-		line.BackgroundColor3 = isHW and hwColor or roadColor
-		line.BackgroundTransparency = isHW and 0 or 0.3
-		line.BorderSizePixel = 0
-		line.ZIndex = 2
-		line.Parent = parent
+		-- Bottom edge
+		if not drawnH[tostring(d.rowMax + 1)] then
+			local isHW = (d.rowMax + 1 == ROWS)
+			local line = Instance.new("Frame")
+			line.AnchorPoint = Vector2.new(0, 0.5)
+			line.Position = UDim2.new(0, 0, v2, 0)
+			line.Size = UDim2.new(1, 0, 0, isHW and 4 or 2)
+			line.BackgroundColor3 = isHW and hwColor or roadColor
+			line.BackgroundTransparency = isHW and 0 or 0.2
+			line.BorderSizePixel = 0
+			line.ZIndex = 2
+			line.Parent = parent
+			drawnH[tostring(d.rowMax + 1)] = true
+		end
+
+		-- Left edge (partial — only spans this district's row range)
+		local vKeyL = d.colMin .. "_" .. d.rowMin .. "_" .. d.rowMax
+		if not drawnV[vKeyL] then
+			local isHW = (d.colMin == 0)
+			local line = Instance.new("Frame")
+			line.AnchorPoint = Vector2.new(0.5, 0)
+			line.Position = UDim2.new(u1, 0, v1, 0)
+			line.Size = UDim2.new(0, isHW and 4 or 2, v2 - v1, 0)
+			line.BackgroundColor3 = isHW and hwColor or roadColor
+			line.BackgroundTransparency = isHW and 0 or 0.2
+			line.BorderSizePixel = 0
+			line.ZIndex = 2
+			line.Parent = parent
+			drawnV[vKeyL] = true
+		end
+
+		-- Right edge (partial)
+		local vKeyR = (d.colMax + 1) .. "_" .. d.rowMin .. "_" .. d.rowMax
+		if not drawnV[vKeyR] then
+			local isHW = (d.colMax + 1 == COLS)
+			local line = Instance.new("Frame")
+			line.AnchorPoint = Vector2.new(0.5, 0)
+			line.Position = UDim2.new(u2, 0, v1, 0)
+			line.Size = UDim2.new(0, isHW and 4 or 2, v2 - v1, 0)
+			line.BackgroundColor3 = isHW and hwColor or roadColor
+			line.BackgroundTransparency = isHW and 0 or 0.2
+			line.BorderSizePixel = 0
+			line.ZIndex = 2
+			line.Parent = parent
+			drawnV[vKeyR] = true
+		end
 	end
 end
 
@@ -146,8 +184,8 @@ end
 local function drawMetro(parent, isDetailed)
 	local mColor = Color3.fromRGB(0, 200, 255)
 
-	-- E-W line at row 4 center
-	local _, vEW = worldToScale(0, ORIGIN_Z + 4 * CELL + CELL / 2)
+	-- E-W line at row 4.5 center (through central band)
+	local _, vEW = worldToScale(0, ORIGIN_Z + 4.5 * CELL + CELL / 2)
 	local ew = Instance.new("Frame")
 	ew.Name = "MetroEW"
 	ew.AnchorPoint = Vector2.new(0, 0.5)
@@ -158,8 +196,8 @@ local function drawMetro(parent, isDetailed)
 	ew.ZIndex = 3
 	ew.Parent = parent
 
-	-- N-S line at col 5 center
-	local uNS, _ = worldToScale(ORIGIN_X + 5 * CELL + CELL / 2, 0)
+	-- N-S line at col 6 (through downtown)
+	local uNS, _ = worldToScale(ORIGIN_X + 6 * CELL, 0)
 	local ns = Instance.new("Frame")
 	ns.Name = "MetroNS"
 	ns.AnchorPoint = Vector2.new(0.5, 0)
@@ -173,12 +211,13 @@ local function drawMetro(parent, isDetailed)
 	-- Stations
 	if isDetailed then
 		local stations = {
-			{ col = 1,   row = 4, name = "Commercial" },
-			{ col = 4,   row = 4, name = "Downtown" },
-			{ col = 6.5, row = 4, name = "Government" },
-			{ col = 5,   row = 1, name = "Industrial" },
-			{ col = 5,   row = 4, name = "Hub" },
-			{ col = 5,   row = 7, name = "Waterfront" },
+			{ col = 2,    row = 4.5, name = "Airport" },
+			{ col = 5,    row = 4.5, name = "Downtown W" },
+			{ col = 8,    row = 4.5, name = "Government" },
+			{ col = 11,   row = 4.5, name = "Residential" },
+			{ col = 6,    row = 1.5, name = "Industrial" },
+			{ col = 6,    row = 4.5, name = "Hub" },
+			{ col = 6,    row = 8,   name = "Waterfront" },
 		}
 		for _, s in ipairs(stations) do
 			local su, sv = worldToScale(ORIGIN_X + s.col * CELL + CELL / 2, ORIGIN_Z + s.row * CELL + CELL / 2)

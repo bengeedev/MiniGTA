@@ -1,5 +1,6 @@
 -- CityBuilder.luau
--- Builds the full GTA island: terrain, roads, districts, landmarks, vehicles.
+-- Phase 1: Infrastructure skeleton — terrain, major roads, railway, metro, water.
+-- No buildings, no decor, no vehicles. Districts get filled in later.
 
 local Workspace = game:GetService("Workspace")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -13,134 +14,103 @@ local CityBuilder = {}
 
 -- Shortcuts
 local GROUND_Y     = GTAConfig.GROUND_Y
-local CELL_SIZE    = GTAConfig.CELL_SIZE
-local BLOCK_SIZE   = GTAConfig.BLOCK_SIZE
-local STREET_WIDTH = GTAConfig.STREET_WIDTH
+local CELL         = GTAConfig.CELL_SIZE
 local COLS         = GTAConfig.GRID_COLS
 local ROWS         = GTAConfig.GRID_ROWS
 local ORIGIN_X     = GTAConfig.CITY_ORIGIN_X
 local ORIGIN_Z     = GTAConfig.CITY_ORIGIN_Z
 local CITY_W       = GTAConfig.CITY_WIDTH
 local CITY_D       = GTAConfig.CITY_DEPTH
+local STREET_W     = GTAConfig.STREET_WIDTH
+local HIGHWAY_W    = GTAConfig.HIGHWAY_WIDTH
 
--- Folder refs set in build()
-local vehicleFolder = nil
+local roadFolder = nil
 
 --------------------------------------------------------------------------------
--- OCCUPANCY GRID
--- Tracks which cells are reserved (infrastructure, landmarks).
--- Buildings only go in free cells.
--- Values: nil/false = free, string = reason reserved
+-- TERRAIN MATERIALS PER DISTRICT
 --------------------------------------------------------------------------------
 
-local occupancy = {}  -- occupancy[col][row] = "reason" or nil
-
-local function reserveCell(col, row, reason)
-	if col < 0 or col >= COLS or row < 0 or row >= ROWS then return end
-	if not occupancy[col] then occupancy[col] = {} end
-	occupancy[col][row] = reason or "reserved"
-end
-
-local function isCellFree(col, row)
-	if not occupancy[col] then return true end
-	return not occupancy[col][row]
-end
-
--- Reserve cells for infrastructure lanes BEFORE placing buildings
-local function reserveInfrastructure()
-	-- Railway at col 4 boundary → reserve cells on both sides (col 3 and col 4)
-	for row = 0, ROWS - 1 do
-		reserveCell(3, row, "railway_adj")
-		reserveCell(4, row, "railway_adj")
-	end
-
-	-- Elevated metro E-W at row 4 → reserve row 4 cells along the metro path
-	for col = 0, COLS - 1 do
-		reserveCell(col, 4, "metro_ew")
-	end
-
-	-- Elevated metro N-S at col 5 → reserve col 5 cells
-	for row = 0, ROWS - 1 do
-		reserveCell(5, row, "metro_ns")
-	end
-
-	-- Water channel at row 5.5 → reserve rows 5 and 6 (both sides of channel)
-	for col = 0, COLS - 1 do
-		reserveCell(col, 5, "water_channel")
-		reserveCell(col, 6, "water_channel")
-	end
-
-	-- Special compound districts (no standard block placement at all)
-	local compoundDistricts = { "military", "prison", "space" }
-	for _, dName in ipairs(compoundDistricts) do
-		local d = GTAConfig.getDistrictDef(dName)
-		if d then
-			for col = d.colMin, d.colMax do
-				for row = d.rowMin, d.rowMax do
-					reserveCell(col, row, "compound_" .. dName)
-				end
-			end
-		end
-	end
-
-	-- Government: reserve center cells for White House compound
-	local gov = GTAConfig.getDistrictDef("government")
-	if gov then
-		local midCol = math.floor((gov.colMin + gov.colMax) / 2)
-		local midRow = math.floor((gov.rowMin + gov.rowMax) / 2)
-		reserveCell(midCol, midRow, "whitehouse")
-		reserveCell(midCol + 1, midRow, "whitehouse")
-		reserveCell(midCol, midRow + 1, "national_mall")
-		reserveCell(midCol + 1, midRow + 1, "monument")
-	end
-
-	-- Airport: reserve runway cells (cols 0-2, center row of airport)
-	local apt = GTAConfig.getDistrictDef("airport")
-	if apt then
-		local runwayRow = math.floor((apt.rowMin + apt.rowMax) / 2)
-		for col = apt.colMin, apt.colMin + 2 do
-			reserveCell(col, runwayRow, "runway")
-		end
-	end
-
-	local count = 0
-	for c, rows in pairs(occupancy) do
-		for r, _ in pairs(rows) do count += 1 end
-	end
-	print("[CityBuilder] Occupancy grid: ", count, "cells reserved")
-end
+local DISTRICT_TERRAIN = {
+	airport      = Enum.Material.Concrete,
+	industrial   = Enum.Material.Slate,
+	power_plant  = Enum.Material.Slate,
+	military     = Enum.Material.Sand,
+	nuclear      = Enum.Material.Ground,
+	commercial   = Enum.Material.Ground,
+	downtown     = Enum.Material.Concrete,
+	government   = Enum.Material.Grass,
+	prison       = Enum.Material.Slate,
+	residential  = Enum.Material.Grass,
+	harbor       = Enum.Material.Slate,
+	water_plant  = Enum.Material.Mud,
+	waterfront   = Enum.Material.Grass,
+	beach        = Enum.Material.Sand,
+	space        = Enum.Material.Basalt,
+}
 
 --------------------------------------------------------------------------------
 -- HELPERS
 --------------------------------------------------------------------------------
-
-local function cellCenter(col, row)
-	return GTAConfig.getCellCenter(col, row)
-end
-
-local function pickRandom(t)
-	if #t == 0 then return nil end
-	return t[math.random(1, #t)]
-end
 
 local function fillTerrain(position, size, material)
 	local region = Region3.new(position - size / 2, position + size / 2):ExpandToGrid(4)
 	Workspace.Terrain:FillRegion(region, 4, material)
 end
 
-local function placeVehicle(templateName, x, z, rotY)
-	local templates = ReplicatedStorage:FindFirstChild("VehicleTemplates")
-	if not templates then return nil end
-	local template = templates:FindFirstChild(templateName)
-	if not template then return nil end
-	local clone = template:Clone()
-	clone:PivotTo(CFrame.new(x, GROUND_Y + 2, z) * CFrame.Angles(0, math.rad(rotY or 0), 0))
-	clone.Parent = vehicleFolder
-	return clone
+local function createRoad(x, z, sizeX, sizeZ, isHighway)
+	local road = Instance.new("Part")
+	road.Name = isHighway and "Highway" or "Road"
+	road.Anchored = true
+	road.Material = Enum.Material.Asphalt
+	road.Color = isHighway and Color3.fromRGB(55, 55, 60) or Color3.fromRGB(45, 45, 50)
+	road.TopSurface = Enum.SurfaceType.Smooth
+	road.BottomSurface = Enum.SurfaceType.Smooth
+	road.Size = Vector3.new(sizeX, 0.3, sizeZ)
+	road.Position = Vector3.new(x, GROUND_Y + 0.15, z)
+	road.Parent = roadFolder
+	return road
+end
+
+local function createSidewalk(x, z, sizeX, sizeZ)
+	local sw = Instance.new("Part")
+	sw.Name = "Sidewalk"
+	sw.Anchored = true
+	sw.Material = Enum.Material.Concrete
+	sw.Color = Color3.fromRGB(170, 165, 155)
+	sw.TopSurface = Enum.SurfaceType.Smooth
+	sw.BottomSurface = Enum.SurfaceType.Smooth
+	sw.Size = Vector3.new(sizeX, 0.5, sizeZ)
+	sw.Position = Vector3.new(x, GROUND_Y + 0.05, z)
+	sw.Parent = roadFolder
+end
+
+local function createLaneMarkings(x, z, length, direction)
+	local DASH = 4
+	local GAP = 6
+	local count = math.floor(length / (DASH + GAP))
+	for i = 0, count - 1 do
+		local mark = Instance.new("Part")
+		mark.Name = "LaneMark"
+		mark.Anchored = true
+		mark.CanCollide = false
+		mark.Material = Enum.Material.SmoothPlastic
+		mark.Color = Color3.fromRGB(220, 210, 160)
+		mark.TopSurface = Enum.SurfaceType.Smooth
+		mark.BottomSurface = Enum.SurfaceType.Smooth
+		local offset = -length / 2 + i * (DASH + GAP) + DASH / 2
+		if direction == "z" then
+			mark.Size = Vector3.new(0.3, 0.05, DASH)
+			mark.Position = Vector3.new(x, GROUND_Y + 0.32, z + offset)
+		else
+			mark.Size = Vector3.new(DASH, 0.05, 0.3)
+			mark.Position = Vector3.new(x + offset, GROUND_Y + 0.32, z)
+		end
+		mark.Parent = roadFolder
+	end
 end
 
 --------------------------------------------------------------------------------
--- 1. TERRAIN — island + surrounding ocean
+-- 1. ISLAND TERRAIN (ocean + base island)
 --------------------------------------------------------------------------------
 
 local function buildIslandTerrain()
@@ -148,14 +118,14 @@ local function buildIslandTerrain()
 	local totalW = CITY_W + margin * 2
 	local totalD = CITY_D + margin * 2
 
-	-- Ocean (water everywhere at low Y)
+	-- Ocean
 	fillTerrain(
 		Vector3.new(0, GTAConfig.WATER_LEVEL - 20, 0),
 		Vector3.new(totalW, 40, totalD),
 		Enum.Material.Water
 	)
 
-	-- Island grass (elevated above water)
+	-- Island base (grass, elevated above water)
 	fillTerrain(
 		Vector3.new(0, GROUND_Y - 10, 0),
 		Vector3.new(CITY_W + 100, 20, CITY_D + 100),
@@ -166,609 +136,377 @@ local function buildIslandTerrain()
 	local coast = GTAConfig.COASTLINE_WIDTH
 	local halfW = CITY_W / 2 + 50
 	local halfD = CITY_D / 2 + 50
-
-	-- North coast
 	fillTerrain(Vector3.new(0, GROUND_Y - 6, -halfD), Vector3.new(CITY_W + 100, 12, coast), Enum.Material.Sand)
-	-- South coast
-	fillTerrain(Vector3.new(0, GROUND_Y - 6, halfD), Vector3.new(CITY_W + 100, 12, coast), Enum.Material.Sand)
-	-- West coast
+	fillTerrain(Vector3.new(0, GROUND_Y - 6,  halfD), Vector3.new(CITY_W + 100, 12, coast), Enum.Material.Sand)
 	fillTerrain(Vector3.new(-halfW, GROUND_Y - 6, 0), Vector3.new(coast, 12, CITY_D + 100), Enum.Material.Sand)
-	-- East coast
-	fillTerrain(Vector3.new(halfW, GROUND_Y - 6, 0), Vector3.new(coast, 12, CITY_D + 100), Enum.Material.Sand)
+	fillTerrain(Vector3.new( halfW, GROUND_Y - 6, 0), Vector3.new(coast, 12, CITY_D + 100), Enum.Material.Sand)
 
 	print("[CityBuilder] Island terrain built")
 end
 
 --------------------------------------------------------------------------------
--- 2. WATER CHANNEL (canal between central & south districts)
+-- 2. PER-DISTRICT TERRAIN
+--------------------------------------------------------------------------------
+
+local function buildDistrictTerrain()
+	for _, d in ipairs(GTAConfig.DISTRICTS) do
+		local mat = DISTRICT_TERRAIN[d.name]
+		if not mat then continue end
+
+		local x1 = ORIGIN_X + d.colMin * CELL
+		local z1 = ORIGIN_Z + d.rowMin * CELL
+		local x2 = ORIGIN_X + (d.colMax + 1) * CELL
+		local z2 = ORIGIN_Z + (d.rowMax + 1) * CELL
+
+		local cx = (x1 + x2) / 2
+		local cz = (z1 + z2) / 2
+		local w = x2 - x1
+		local d_depth = z2 - z1
+
+		fillTerrain(
+			Vector3.new(cx, GROUND_Y - 4, cz),
+			Vector3.new(w, 8, d_depth),
+			mat
+		)
+	end
+	print("[CityBuilder] District terrain painted (15 zones)")
+end
+
+--------------------------------------------------------------------------------
+-- 3. MAJOR ROADS (zone-boundary avenues + perimeter highway)
+--------------------------------------------------------------------------------
+
+local function buildMajorRoads()
+	-- Collect all unique district boundary edges
+	-- Rows: horizontal E-W roads at district top/bottom edges
+	-- Cols: vertical N-S roads at district left/right edges
+
+	local hEdges = {}  -- hEdges[row] = { {xMin, xMax}, ... }
+	local vEdges = {}  -- vEdges[col] = { {zMin, zMax}, ... }
+
+	for _, d in ipairs(GTAConfig.DISTRICTS) do
+		-- Top edge (row boundary)
+		local topRow = d.rowMin
+		if not hEdges[topRow] then hEdges[topRow] = {} end
+		table.insert(hEdges[topRow], {
+			x1 = ORIGIN_X + d.colMin * CELL,
+			x2 = ORIGIN_X + (d.colMax + 1) * CELL,
+		})
+
+		-- Bottom edge
+		local botRow = d.rowMax + 1
+		if not hEdges[botRow] then hEdges[botRow] = {} end
+		table.insert(hEdges[botRow], {
+			x1 = ORIGIN_X + d.colMin * CELL,
+			x2 = ORIGIN_X + (d.colMax + 1) * CELL,
+		})
+
+		-- Left edge
+		local leftCol = d.colMin
+		if not vEdges[leftCol] then vEdges[leftCol] = {} end
+		table.insert(vEdges[leftCol], {
+			z1 = ORIGIN_Z + d.rowMin * CELL,
+			z2 = ORIGIN_Z + (d.rowMax + 1) * CELL,
+		})
+
+		-- Right edge
+		local rightCol = d.colMax + 1
+		if not vEdges[rightCol] then vEdges[rightCol] = {} end
+		table.insert(vEdges[rightCol], {
+			z1 = ORIGIN_Z + d.rowMin * CELL,
+			z2 = ORIGIN_Z + (d.rowMax + 1) * CELL,
+		})
+	end
+
+	local roadCount = 0
+	local SW_THICK = 5  -- sidewalk thickness
+
+	-- Build horizontal roads (E-W)
+	for row, segments in pairs(hEdges) do
+		local z = ORIGIN_Z + row * CELL
+		local isPerimeter = (row == 0 or row == ROWS)
+		local w = isPerimeter and HIGHWAY_W or STREET_W
+
+		-- Merge overlapping segments into one full-width road
+		local minX, maxX = math.huge, -math.huge
+		for _, seg in ipairs(segments) do
+			minX = math.min(minX, seg.x1)
+			maxX = math.max(maxX, seg.x2)
+		end
+
+		local cx = (minX + maxX) / 2
+		local length = maxX - minX + 60  -- extend slightly past edges
+
+		createRoad(cx, z, length, w, isPerimeter)
+		createLaneMarkings(cx, z, length, "x")
+		createSidewalk(cx, z - w / 2 - SW_THICK / 2, length, SW_THICK)
+		createSidewalk(cx, z + w / 2 + SW_THICK / 2, length, SW_THICK)
+		roadCount += 1
+	end
+
+	-- Build vertical roads (N-S)
+	for col, segments in pairs(vEdges) do
+		local x = ORIGIN_X + col * CELL
+		local isPerimeter = (col == 0 or col == COLS)
+		local w = isPerimeter and HIGHWAY_W or STREET_W
+
+		local minZ, maxZ = math.huge, -math.huge
+		for _, seg in ipairs(segments) do
+			minZ = math.min(minZ, seg.z1)
+			maxZ = math.max(maxZ, seg.z2)
+		end
+
+		local cz = (minZ + maxZ) / 2
+		local length = maxZ - minZ + 60
+
+		createRoad(x, cz, w, length, isPerimeter)
+		createLaneMarkings(x, cz, length, "z")
+		createSidewalk(x - w / 2 - SW_THICK / 2, cz, SW_THICK, length)
+		createSidewalk(x + w / 2 + SW_THICK / 2, cz, SW_THICK, length)
+		roadCount += 1
+	end
+
+	print("[CityBuilder] Major roads built:", roadCount, "avenues")
+end
+
+--------------------------------------------------------------------------------
+-- 4. WATER CHANNEL (canal between central & south bands)
 --------------------------------------------------------------------------------
 
 local function buildWaterChannel()
-	local chanZ = ORIGIN_Z + GTAConfig.WATER_CHANNEL_Z_ROW * CELL_SIZE
+	local chanZ = ORIGIN_Z + GTAConfig.WATER_CHANNEL_Z_ROW * CELL
 	local chanW = GTAConfig.WATER_CHANNEL_WIDTH
 
-	-- Dig out grass and fill with water
+	-- Dig out terrain and fill with water
 	fillTerrain(
 		Vector3.new(0, GROUND_Y - 8, chanZ),
-		Vector3.new(CITY_W - CELL_SIZE * 2, 16, chanW),
+		Vector3.new(CITY_W - CELL * 2, 16, chanW),
 		Enum.Material.Air
 	)
 	fillTerrain(
 		Vector3.new(0, GTAConfig.WATER_LEVEL - 4, chanZ),
-		Vector3.new(CITY_W - CELL_SIZE * 2, 8, chanW),
+		Vector3.new(CITY_W - CELL * 2, 8, chanW),
 		Enum.Material.Water
 	)
+
+	-- Stone walls on both banks
+	for _, side in ipairs({-1, 1}) do
+		local wallZ = chanZ + side * (chanW / 2 + 1)
+		local wall = Instance.new("Part")
+		wall.Name = "CanalWall"
+		wall.Anchored = true
+		wall.Material = Enum.Material.Slate
+		wall.Color = Color3.fromRGB(80, 75, 70)
+		wall.Size = Vector3.new(CITY_W - CELL * 2, 6, 2)
+		wall.Position = Vector3.new(0, GROUND_Y - 2, wallZ)
+		wall.Parent = roadFolder
+	end
 
 	print("[CityBuilder] Water channel built")
 end
 
 --------------------------------------------------------------------------------
--- 3. ROADS — grid of streets + highway ring
---------------------------------------------------------------------------------
-
-local function createRoadPart(x, z, sizeX, sizeZ, parent)
-	local road = Instance.new("Part")
-	road.Name = "Road"
-	road.Anchored = true
-	road.Material = Enum.Material.Asphalt
-	road.Color = Color3.fromRGB(45, 45, 50)
-	road.TopSurface = Enum.SurfaceType.Smooth
-	road.BottomSurface = Enum.SurfaceType.Smooth
-	road.Size = Vector3.new(sizeX, 0.2, sizeZ)
-	road.Position = Vector3.new(x, GROUND_Y + 0.1, z)
-	road.Parent = parent
-	return road
-end
-
-local function createSidewalk(x, z, sizeX, sizeZ, parent)
-	local sw = Instance.new("Part")
-	sw.Name = "Sidewalk"
-	sw.Anchored = true
-	sw.Material = Enum.Material.Concrete
-	sw.Color = Color3.fromRGB(170, 165, 155)
-	sw.TopSurface = Enum.SurfaceType.Smooth
-	sw.BottomSurface = Enum.SurfaceType.Smooth
-	sw.Size = Vector3.new(sizeX, 0.4, sizeZ)
-	sw.Position = Vector3.new(x, GROUND_Y + 0.05, z)
-	sw.Parent = parent
-end
-
-local function createLaneMarkings(x, z, length, direction, parent)
-	local DASH_LEN = 4
-	local DASH_GAP = 6
-	local count = math.floor(length / (DASH_LEN + DASH_GAP))
-
-	for i = 0, count - 1 do
-		local mark = Instance.new("Part")
-		mark.Name = "LaneMark"
-		mark.Anchored = true
-		mark.CanCollide = false
-		mark.Material = Enum.Material.SmoothPlastic
-		mark.Color = Color3.fromRGB(220, 210, 160)
-		mark.TopSurface = Enum.SurfaceType.Smooth
-		mark.BottomSurface = Enum.SurfaceType.Smooth
-
-		local offset = -length / 2 + i * (DASH_LEN + DASH_GAP) + DASH_LEN / 2
-
-		if direction == "z" then
-			mark.Size = Vector3.new(0.3, 0.05, DASH_LEN)
-			mark.Position = Vector3.new(x, GROUND_Y + 0.22, z + offset)
-		else
-			mark.Size = Vector3.new(DASH_LEN, 0.05, 0.3)
-			mark.Position = Vector3.new(x + offset, GROUND_Y + 0.22, z)
-		end
-		mark.Parent = parent
-	end
-end
-
-local function buildRoads(roadFolder)
-	local extra = 60  -- extend roads past grid edge
-
-	-- Determine which rows/cols are perimeter (highway width)
-	local function roadWidth(idx, maxIdx)
-		if idx == 0 or idx == maxIdx then
-			return GTAConfig.HIGHWAY_WIDTH
-		end
-		return STREET_WIDTH
-	end
-
-	-- Vertical streets (N-S along Z)
-	for col = 0, COLS do
-		local x = ORIGIN_X + col * CELL_SIZE
-		local w = roadWidth(col, COLS)
-		createRoadPart(x, 0, w, CITY_D + extra, roadFolder)
-		createLaneMarkings(x, 0, CITY_D + extra, "z", roadFolder)
-		createSidewalk(x - w / 2 - 2, 0, 4, CITY_D + extra, roadFolder)
-		createSidewalk(x + w / 2 + 2, 0, 4, CITY_D + extra, roadFolder)
-	end
-
-	-- Horizontal streets (E-W along X)
-	for row = 0, ROWS do
-		local z = ORIGIN_Z + row * CELL_SIZE
-		local w = roadWidth(row, ROWS)
-		createRoadPart(0, z, CITY_W + extra, w, roadFolder)
-		createLaneMarkings(0, z, CITY_W + extra, "x", roadFolder)
-		createSidewalk(0, z - w / 2 - 2, CITY_W + extra, 4, roadFolder)
-		createSidewalk(0, z + w / 2 + 2, CITY_W + extra, 4, roadFolder)
-	end
-
-	print("[CityBuilder] Roads built:", COLS + 1, "vertical,", ROWS + 1, "horizontal")
-end
-
---------------------------------------------------------------------------------
--- 4. RAILWAY (ground-level freight rail N-S through industrial → harbor)
---------------------------------------------------------------------------------
-
-local function buildRailway(roadFolder)
-	-- Rail runs at the col-4 boundary (between industrial and other districts)
-	local railX = ORIGIN_X + 4 * CELL_SIZE
-	-- Place rail track segments every CELL_SIZE along Z
-	for row = 0, ROWS - 1 do
-		local _, z = cellCenter(4, row)
-		DecorCreation.place("railtrack", railX - 8, z, 1)
-	end
-	print("[CityBuilder] Railway built along col 4")
-end
-
---------------------------------------------------------------------------------
--- 5. ELEVATED METRO (NYC-style, crosses city E-W and N-S)
---------------------------------------------------------------------------------
-
-local function buildElevatedMetro()
-	local metroY = GTAConfig.METRO_HEIGHT
-
-	-- E-W metro line at row 4 center (through commercial → downtown → government → residential)
-	local ewZ = ORIGIN_Z + 4 * CELL_SIZE + CELL_SIZE / 2
-	for col = 0, COLS - 1 do
-		local x, _ = cellCenter(col, 4)
-		DecorCreation.place("highspeed_track", x, ewZ, 1, metroY)
-	end
-
-	-- N-S metro line at col 5 center (through industrial → downtown → waterfront)
-	local nsX = ORIGIN_X + 5 * CELL_SIZE + CELL_SIZE / 2
-	for row = 0, ROWS - 1 do
-		local _, z = cellCenter(5, row)
-		DecorCreation.place("highspeed_track", nsX, z, 1, metroY)
-	end
-
-	-- Metro stations at key intersections
-	local stations = {
-		{ col = 1,   row = 4, name = "Commercial" },
-		{ col = 4,   row = 4, name = "Downtown Central" },
-		{ col = 6.5, row = 4, name = "Government" },
-		{ col = 5,   row = 1, name = "Industrial" },
-		{ col = 5,   row = 4, name = "Metro Hub" },
-		{ col = 5,   row = 7, name = "Waterfront" },
-	}
-	for _, s in ipairs(stations) do
-		local sx, sz = cellCenter(s.col, s.row)
-		DecorCreation.place("station_platform", sx, sz, 1, metroY)
-	end
-
-	print("[CityBuilder] Elevated metro built with", #stations, "stations")
-end
-
---------------------------------------------------------------------------------
--- 6. BRIDGES (over water channel)
+-- 5. BRIDGES (over water channel at major road crossings)
 --------------------------------------------------------------------------------
 
 local function buildBridges()
-	local chanZ = ORIGIN_Z + GTAConfig.WATER_CHANNEL_Z_ROW * CELL_SIZE
+	local chanZ = ORIGIN_Z + GTAConfig.WATER_CHANNEL_Z_ROW * CELL
+	local chanW = GTAConfig.WATER_CHANNEL_WIDTH
 
-	-- Place bridges where major roads cross the water channel
-	for col = 1, COLS - 1, 2 do
-		local x = ORIGIN_X + col * CELL_SIZE
-		DecorCreation.place("bridge_railings", x, chanZ, 1)
-		DecorCreation.place("bridge_pillars", x, chanZ, 1)
+	-- Find which vertical roads cross the water channel
+	-- Use same boundary detection as major roads
+	local bridgeCols = {}
+	for _, d in ipairs(GTAConfig.DISTRICTS) do
+		bridgeCols[d.colMin] = true
+		bridgeCols[d.colMax + 1] = true
+	end
+
+	for col, _ in pairs(bridgeCols) do
+		local x = ORIGIN_X + col * CELL
+		-- Only build bridge if road actually spans the channel zone
+		if col > 0 and col < COLS then
+			-- Bridge deck
+			local deck = Instance.new("Part")
+			deck.Name = "BridgeDeck"
+			deck.Anchored = true
+			deck.Material = Enum.Material.Concrete
+			deck.Color = Color3.fromRGB(160, 155, 145)
+			deck.Size = Vector3.new(STREET_W + 10, 1, chanW + 20)
+			deck.Position = Vector3.new(x, GROUND_Y + 0.5, chanZ)
+			deck.Parent = roadFolder
+
+			-- Bridge railings
+			for _, side in ipairs({-1, 1}) do
+				local rail = Instance.new("Part")
+				rail.Name = "BridgeRail"
+				rail.Anchored = true
+				rail.Material = Enum.Material.Metal
+				rail.Color = Color3.fromRGB(100, 100, 110)
+				rail.Size = Vector3.new(1, 3, chanW + 20)
+				rail.Position = Vector3.new(x + side * (STREET_W / 2 + 5), GROUND_Y + 2, chanZ)
+				rail.Parent = roadFolder
+			end
+		end
 	end
 
 	print("[CityBuilder] Bridges built over water channel")
 end
 
 --------------------------------------------------------------------------------
--- 7. DISTRICT BUILDING PLACEMENT
+-- 6. RAILWAY (ground-level N-S freight line)
 --------------------------------------------------------------------------------
 
--- Place standard block buildings for a district (respects occupancy grid)
-local function buildStandardBlocks(districtName)
-	local def = GTAConfig.getDistrictDef(districtName)
-	if not def then return end
+local function buildRailway()
+	-- Railway runs along the col-4 boundary (airport/industrial divide)
+	-- extends full island height
+	local railX = ORIGIN_X + 4 * CELL
 
-	local pool = GTAConfig.DISTRICT_BUILDINGS[districtName]
-	if not pool or #pool == 0 then return end
+	-- Rail bed (gravel strip)
+	local bed = Instance.new("Part")
+	bed.Name = "RailBed"
+	bed.Anchored = true
+	bed.Material = Enum.Material.Pebble
+	bed.Color = Color3.fromRGB(120, 110, 95)
+	bed.Size = Vector3.new(12, 0.2, CITY_D + 40)
+	bed.Position = Vector3.new(railX, GROUND_Y + 0.1, 0)
+	bed.Parent = roadFolder
 
-	-- Keep buildings well inside the block (away from roads at cell edges)
-	-- Block is 100 studs, roads at edges. Place at ±20 from center = 40 studs from road.
-	local INSET = 20
-
-	local placed = 0
-	for col = def.colMin, def.colMax do
-		for row = def.rowMin, def.rowMax do
-			-- Skip reserved cells (infrastructure, landmarks)
-			if not isCellFree(col, row) then continue end
-
-			local cx, cz = cellCenter(col, row)
-
-			-- Quadrant offsets within the block (well inside, not near road edges)
-			local offsets = {
-				{ -INSET, -INSET },
-				{  INSET, -INSET },
-				{ -INSET,  INSET },
-				{  INSET,  INSET },
-			}
-
-			-- Place 2-3 buildings per block (not all 4, for variety/performance)
-			local count = math.random(2, 3)
-			-- Shuffle offsets
-			for i = #offsets, 2, -1 do
-				local j = math.random(1, i)
-				offsets[i], offsets[j] = offsets[j], offsets[i]
-			end
-
-			for i = 1, count do
-				local ox, oz = offsets[i][1], offsets[i][2]
-				local asset = pickRandom(pool)
-				if asset then
-					DecorCreation.place(asset, cx + ox, cz + oz, 1)
-					placed += 1
-				end
-			end
-		end
+	-- Rails (two steel lines)
+	for _, offset in ipairs({-2, 2}) do
+		local rail = Instance.new("Part")
+		rail.Name = "Rail"
+		rail.Anchored = true
+		rail.Material = Enum.Material.Metal
+		rail.Color = Color3.fromRGB(140, 140, 150)
+		rail.Size = Vector3.new(0.4, 0.3, CITY_D + 40)
+		rail.Position = Vector3.new(railX + offset, GROUND_Y + 0.25, 0)
+		rail.Parent = roadFolder
 	end
 
-	print("[CityBuilder]", districtName, "blocks:", placed, "buildings")
+	-- Cross-ties every 8 studs
+	local tieCount = math.floor(CITY_D / 8)
+	for i = 0, tieCount do
+		local z = ORIGIN_Z - 20 + i * 8
+		local tie = Instance.new("Part")
+		tie.Name = "Tie"
+		tie.Anchored = true
+		tie.CanCollide = false
+		tie.Material = Enum.Material.Wood
+		tie.Color = Color3.fromRGB(90, 60, 30)
+		tie.Size = Vector3.new(8, 0.15, 1.5)
+		tie.Position = Vector3.new(railX, GROUND_Y + 0.12, z)
+		tie.Parent = roadFolder
+	end
+
+	print("[CityBuilder] Railway built along col 4 (N-S)")
 end
 
 --------------------------------------------------------------------------------
--- 8. SPECIAL DISTRICT BUILDERS (landmarks & compounds)
+-- 7. ELEVATED METRO (NYC-style, E-W + N-S crossing)
 --------------------------------------------------------------------------------
 
-local function buildAirport()
-	buildStandardBlocks("airport") -- a few terminal-area buildings
+local function buildElevatedMetro()
+	local metroY = GTAConfig.METRO_HEIGHT
+	local metroColor = Color3.fromRGB(60, 65, 75)
+	local pillarColor = Color3.fromRGB(80, 80, 90)
 
-	local cx, cz = GTAConfig.getDistrictCenter("airport")
+	-- E-W line through central band center (row 4.5 → between rows 4 and 5)
+	local ewZ = ORIGIN_Z + 4.5 * CELL + CELL / 2
 
-	-- Runway lines (long strip across cols 0-3)
-	local runwayX = ORIGIN_X + 1.5 * CELL_SIZE + CELL_SIZE / 2
-	DecorCreation.place("runwaylines", runwayX, cz, 1.5)
-	DecorCreation.place("taxilines", runwayX + CELL_SIZE, cz, 1)
+	-- Track deck
+	local ewDeck = Instance.new("Part")
+	ewDeck.Name = "MetroEW"
+	ewDeck.Anchored = true
+	ewDeck.Material = Enum.Material.Metal
+	ewDeck.Color = metroColor
+	ewDeck.Size = Vector3.new(CITY_W + 40, 1, 10)
+	ewDeck.Position = Vector3.new(0, metroY, ewZ)
+	ewDeck.Parent = roadFolder
 
-	-- Terminal & tower
-	DecorCreation.place("airport_terminal", cx + CELL_SIZE, cz, 1)
-	DecorCreation.place("airport_tower", cx + CELL_SIZE + 50, cz - 40, 1)
-
-	-- Parked jumbo jet on runway
-	placeVehicle("JumboJet_AF1", runwayX, cz, 0)
-
-	-- Parking garage near terminal
-	DecorCreation.place("parking_garage", cx + CELL_SIZE * 1.5, cz + CELL_SIZE / 2, 1)
-
-	print("[CityBuilder] Airport district built")
-end
-
-local function buildIndustrial()
-	buildStandardBlocks("industrial")
-
-	local def = GTAConfig.getDistrictDef("industrial")
-	local cx, cz = GTAConfig.getDistrictCenter("industrial")
-
-	-- Key landmarks spread across district
-	DecorCreation.place("power_plant", cx - CELL_SIZE, cz - CELL_SIZE / 2, 1)
-	DecorCreation.place("nuclear_plant", cx + CELL_SIZE, cz - CELL_SIZE, 1)
-	DecorCreation.place("water_plant", cx, cz + CELL_SIZE, 1)
-	DecorCreation.place("junkyard", cx - CELL_SIZE / 2, cz + CELL_SIZE / 2, 1)
-	DecorCreation.place("junk_cars", cx + CELL_SIZE / 2, cz + CELL_SIZE, 1)
-
-	print("[CityBuilder] Industrial district built")
-end
-
-local function buildMilitary()
-	local cx, cz = GTAConfig.getDistrictCenter("military")
-
-	-- Military base compound (fills most of the district)
-	DecorCreation.place("military_base", cx, cz, 1)
-	DecorCreation.place("command_center", cx + 40, cz - 40, 1)
-
-	-- Watchtowers at corners
-	local def = GTAConfig.getDistrictDef("military")
-	local topLeft_x = ORIGIN_X + def.colMin * CELL_SIZE + 20
-	local topLeft_z = ORIGIN_Z + def.rowMin * CELL_SIZE + 20
-	local botRight_x = ORIGIN_X + (def.colMax + 1) * CELL_SIZE - 20
-	local botRight_z = ORIGIN_Z + (def.rowMax + 1) * CELL_SIZE - 20
-
-	DecorCreation.place("watchtower", topLeft_x, topLeft_z, 1)
-	DecorCreation.place("watchtower", botRight_x, topLeft_z, 1)
-	DecorCreation.place("watchtower", topLeft_x, botRight_z, 1)
-	DecorCreation.place("watchtower", botRight_x, botRight_z, 1)
-
-	-- Warning signs along edges
-	DecorCreation.place("military_warning", cx - 60, cz, 1)
-	DecorCreation.place("military_warning", cx + 60, cz, 1)
-	DecorCreation.place("military_warning", cx, cz - 60, 1)
-	DecorCreation.place("military_warning", cx, cz + 60, 1)
-
-	print("[CityBuilder] Military district built")
-end
-
-local function buildPrison()
-	local cx, cz = GTAConfig.getDistrictCenter("prison")
-
-	-- Prison compound
-	DecorCreation.place("prison_building", cx, cz, 1)
-
-	-- Prison towers at corners
-	local def = GTAConfig.getDistrictDef("prison")
-	local x1 = ORIGIN_X + def.colMin * CELL_SIZE + 15
-	local z1 = ORIGIN_Z + def.rowMin * CELL_SIZE + 15
-	local x2 = ORIGIN_X + (def.colMax + 1) * CELL_SIZE - 15
-	local z2 = ORIGIN_Z + (def.rowMax + 1) * CELL_SIZE - 15
-
-	DecorCreation.place("prison_tower", x1, z1, 1)
-	DecorCreation.place("prison_tower", x2, z1, 1)
-	DecorCreation.place("prison_tower", x1, z2, 1)
-	DecorCreation.place("prison_tower", x2, z2, 1)
-
-	-- Prison fence runs (N-S on east and west edges)
-	DecorCreation.createPrisonFenceRun(x1, z1, z2)
-	DecorCreation.createPrisonFenceRun(x2, z1, z2)
-
-	-- Burning barrels in yard
-	DecorCreation.place("burning_barrel", cx - 15, cz + 10, 1)
-	DecorCreation.place("burning_barrel", cx + 15, cz - 10, 1)
-
-	print("[CityBuilder] Prison district built")
-end
-
-local function buildCommercial()
-	buildStandardBlocks("commercial")
-
-	local cx, cz = GTAConfig.getDistrictCenter("commercial")
-
-	-- Extra shops & parking
-	DecorCreation.place("parking_garage", cx + CELL_SIZE, cz + CELL_SIZE, 1)
-	DecorCreation.place("billboard", cx - CELL_SIZE / 2, cz - CELL_SIZE, 1)
-	DecorCreation.place("billboard", cx + CELL_SIZE, cz, 1)
-
-	print("[CityBuilder] Commercial district built")
-end
-
-local function buildDowntown()
-	buildStandardBlocks("downtown")
-
-	local cx, cz = GTAConfig.getDistrictCenter("downtown")
-
-	-- Extra skyscrapers for skyline density
-	DecorCreation.place("skyscraper", cx - 30, cz - 30, 1)
-	DecorCreation.place("skyscraper", cx + 30, cz + 30, 1)
-
-	-- Glass cube flagship store
-	DecorCreation.place("glass_cube_store", cx, cz - CELL_SIZE / 2, 1)
-
-	-- Central fountain
-	DecorCreation.place("fountain", cx, cz, 1)
-
-	print("[CityBuilder] Downtown district built")
-end
-
-local function buildGovernment()
-	local cx, cz = GTAConfig.getDistrictCenter("government")
-
-	-- White House compound (center of district)
-	DecorCreation.place("whitehouse", cx, cz, 1)
-
-	-- Washington Monument (east of White House)
-	DecorCreation.place("washington_monument", cx + CELL_SIZE * 0.7, cz, 1)
-
-	-- National Mall (south of White House)
-	DecorCreation.place("national_mall", cx, cz + CELL_SIZE * 0.8, 1)
-
-	-- Fountain in front of White House
-	DecorCreation.place("fountain", cx, cz - 40, 1)
-
-	-- Government buildings around the compound edges (only in free cells)
-	local def = GTAConfig.getDistrictDef("government")
-	local pool = GTAConfig.DISTRICT_BUILDINGS["government"]
-	for col = def.colMin, def.colMax do
-		for row = def.rowMin, def.rowMax do
-			if isCellFree(col, row) then
-				local bx, bz = cellCenter(col, row)
-				local asset = pickRandom(pool)
-				if asset then
-					DecorCreation.place(asset, bx, bz, 1)
-				end
-			end
-		end
+	-- Pillars for E-W line
+	for col = 0, COLS, 2 do
+		local px = ORIGIN_X + col * CELL
+		local pillar = Instance.new("Part")
+		pillar.Name = "MetroPillar"
+		pillar.Anchored = true
+		pillar.Material = Enum.Material.Concrete
+		pillar.Color = pillarColor
+		pillar.Size = Vector3.new(3, metroY - GROUND_Y, 3)
+		pillar.Position = Vector3.new(px, GROUND_Y + (metroY - GROUND_Y) / 2, ewZ)
+		pillar.Parent = roadFolder
 	end
 
-	print("[CityBuilder] Government district built")
-end
+	-- N-S line through downtown center (col 6 → between cols 5 and 6)
+	local nsX = ORIGIN_X + 6 * CELL
 
-local function buildResidential()
-	buildStandardBlocks("residential")
+	local nsDeck = Instance.new("Part")
+	nsDeck.Name = "MetroNS"
+	nsDeck.Anchored = true
+	nsDeck.Material = Enum.Material.Metal
+	nsDeck.Color = metroColor
+	nsDeck.Size = Vector3.new(10, 1, CITY_D + 40)
+	nsDeck.Position = Vector3.new(nsX, metroY, 0)
+	nsDeck.Parent = roadFolder
 
-	local cx, cz = GTAConfig.getDistrictCenter("residential")
-
-	-- Park
-	DecorCreation.place("park", cx, cz - CELL_SIZE / 2, 1)
-
-	-- Basketball courts
-	DecorCreation.place("basketball_court", cx - CELL_SIZE / 2, cz + CELL_SIZE / 2, 1)
-	DecorCreation.place("basketball_court", cx + CELL_SIZE / 2, cz + CELL_SIZE / 2, 1)
-
-	-- Mansions on the north edge
-	local def = GTAConfig.getDistrictDef("residential")
-	for col = def.colMin, def.colMax do
-		local mx, mz = cellCenter(col, def.rowMin)
-		DecorCreation.place("mansion", mx, mz, 1)
+	-- Pillars for N-S line
+	for row = 0, ROWS, 2 do
+		local pz = ORIGIN_Z + row * CELL
+		local pillar = Instance.new("Part")
+		pillar.Name = "MetroPillar"
+		pillar.Anchored = true
+		pillar.Material = Enum.Material.Concrete
+		pillar.Color = pillarColor
+		pillar.Size = Vector3.new(3, metroY - GROUND_Y, 3)
+		pillar.Position = Vector3.new(nsX, GROUND_Y + (metroY - GROUND_Y) / 2, pz)
+		pillar.Parent = roadFolder
 	end
 
-	print("[CityBuilder] Residential district built")
-end
+	-- Station platforms at key intersections
+	local stations = {
+		{ x = ORIGIN_X + 2 * CELL,  z = ewZ, name = "Airport" },
+		{ x = ORIGIN_X + 5 * CELL,  z = ewZ, name = "Downtown West" },
+		{ x = ORIGIN_X + 8 * CELL,  z = ewZ, name = "Government" },
+		{ x = ORIGIN_X + 11 * CELL, z = ewZ, name = "Residential" },
+		{ x = nsX, z = ORIGIN_Z + 1.5 * CELL, name = "Industrial" },
+		{ x = nsX, z = ewZ, name = "Metro Hub" },
+		{ x = nsX, z = ORIGIN_Z + 8 * CELL, name = "Waterfront" },
+	}
 
-local function buildHarbor()
-	buildStandardBlocks("harbor")
+	for _, s in ipairs(stations) do
+		-- Platform
+		local plat = Instance.new("Part")
+		plat.Name = "Station_" .. s.name
+		plat.Anchored = true
+		plat.Material = Enum.Material.Concrete
+		plat.Color = Color3.fromRGB(180, 175, 165)
+		plat.Size = Vector3.new(20, 0.5, 20)
+		plat.Position = Vector3.new(s.x, metroY + 0.5, s.z)
+		plat.Parent = roadFolder
 
-	local cx, cz = GTAConfig.getDistrictCenter("harbor")
+		-- Station sign
+		local sign = Instance.new("Part")
+		sign.Name = "StationSign"
+		sign.Anchored = true
+		sign.Material = Enum.Material.SmoothPlastic
+		sign.Color = Color3.fromRGB(0, 150, 220)
+		sign.Size = Vector3.new(12, 3, 0.5)
+		sign.Position = Vector3.new(s.x, metroY + 3, s.z - 10)
+		sign.Parent = roadFolder
 
-	-- Train station
-	DecorCreation.place("station_hall", cx, cz - CELL_SIZE / 2, 1)
-	DecorCreation.place("station_platform", cx, cz - CELL_SIZE / 2 + 25, 1)
-
-	-- Dock buildings along waterfront
-	for i = -1, 1 do
-		DecorCreation.place("dock_building", cx + i * CELL_SIZE * 0.8, cz + CELL_SIZE, 1)
+		local sg = Instance.new("SurfaceGui")
+		sg.Face = Enum.NormalId.Front
+		sg.Parent = sign
+		local tl = Instance.new("TextLabel")
+		tl.Size = UDim2.new(1, 0, 1, 0)
+		tl.BackgroundTransparency = 1
+		tl.Text = s.name
+		tl.TextColor3 = Color3.fromRGB(255, 255, 255)
+		tl.Font = Enum.Font.GothamBold
+		tl.TextScaled = true
+		tl.Parent = sg
 	end
 
-	print("[CityBuilder] Harbor district built")
-end
-
-local function buildWaterfront()
-	buildStandardBlocks("waterfront")
-
-	local cx, cz = GTAConfig.getDistrictCenter("waterfront")
-
-	-- Miami-style buildings along the water edge
-	local def = GTAConfig.getDistrictDef("waterfront")
-	for col = def.colMin, def.colMax do
-		local mx, mz = cellCenter(col, def.rowMax)
-		DecorCreation.place("miami_building", mx, mz, 1)
-	end
-
-	-- Bridges along waterfront
-	DecorCreation.place("bridge_railings", cx, cz + CELL_SIZE, 1)
-
-	-- Fountain promenade
-	DecorCreation.place("fountain", cx, cz, 1)
-	DecorCreation.place("fountain", cx + CELL_SIZE, cz, 1)
-
-	print("[CityBuilder] Waterfront district built")
-end
-
-local function buildBeach()
-	buildStandardBlocks("beach")
-
-	local cx, cz = GTAConfig.getDistrictCenter("beach")
-
-	-- Golf course
-	DecorCreation.place("golf_course", cx, cz, 1)
-
-	-- Beach sand terrain
-	local def = GTAConfig.getDistrictDef("beach")
-	local bx1 = ORIGIN_X + def.colMin * CELL_SIZE
-	local bz1 = ORIGIN_Z + def.rowMin * CELL_SIZE
-	local bx2 = ORIGIN_X + (def.colMax + 1) * CELL_SIZE
-	local bz2 = ORIGIN_Z + (def.rowMax + 1) * CELL_SIZE
-	local sandCX = (bx1 + bx2) / 2
-	local sandCZ = (bz1 + bz2) / 2
-	fillTerrain(
-		Vector3.new(sandCX, GROUND_Y - 4, sandCZ),
-		Vector3.new(bx2 - bx1, 8, bz2 - bz1),
-		Enum.Material.Sand
-	)
-
-	-- Extra palm trees
-	for i = 1, 6 do
-		DecorCreation.place("tree", cx + math.random(-80, 80), cz + math.random(-80, 80), 1)
-	end
-
-	print("[CityBuilder] Beach district built")
-end
-
-local function buildSpace()
-	local cx, cz = GTAConfig.getDistrictCenter("space")
-
-	-- Shuttle launchpad (center)
-	DecorCreation.place("shuttle_launchpad", cx, cz, 1)
-
-	-- Crashed UFO (easter egg, offset)
-	DecorCreation.place("crashed_ufo", cx + 50, cz + 40, 1)
-
-	-- Warning signs around the perimeter
-	DecorCreation.place("military_warning", cx - 50, cz, 1)
-	DecorCreation.place("military_warning", cx + 50, cz, 1)
-	DecorCreation.place("military_warning", cx, cz - 60, 1)
-	DecorCreation.place("military_warning", cx, cz + 60, 1)
-
-	-- Watchtower
-	DecorCreation.place("watchtower", cx - 40, cz - 40, 1)
-
-	print("[CityBuilder] Space district built")
-end
-
---------------------------------------------------------------------------------
--- 9. STREET FURNITURE (lamps, trees, etc. per district)
---------------------------------------------------------------------------------
-
-local function buildStreetFurniture()
-	local placed = 0
-
-	for col = 0, COLS do
-		for row = 0, ROWS do
-			local x = ORIGIN_X + col * CELL_SIZE
-			local z = ORIGIN_Z + row * CELL_SIZE
-			local district = GTAConfig.getDistrict(math.min(col, COLS - 1), math.min(row, ROWS - 1))
-			local pool = GTAConfig.DISTRICT_DECOR[district]
-
-			-- Lamps at intersection corners
-			DecorCreation.place("lamp", x + STREET_WIDTH / 2 + 3, z + STREET_WIDTH / 2 + 3, 1)
-			DecorCreation.place("lamp", x - STREET_WIDTH / 2 - 3, z + STREET_WIDTH / 2 + 3, 1)
-			placed += 2
-
-			-- District-specific decor (chance-based, every other intersection)
-			if pool and #pool > 0 and (col + row) % 2 == 0 then
-				local asset = pickRandom(pool)
-				if asset and asset ~= "lamp" then
-					DecorCreation.place(asset, x + STREET_WIDTH / 2 + 8, z + 15, 1)
-					placed += 1
-				end
-			end
-
-			-- Trees along sidewalks (every 2nd intersection)
-			if col % 2 == 0 and row % 2 == 0 then
-				DecorCreation.place("tree", x + STREET_WIDTH / 2 + 6, z + 15, 1)
-				DecorCreation.place("tree", x - STREET_WIDTH / 2 - 6, z - 15, 1)
-				placed += 2
-			end
-		end
-	end
-
-	print("[CityBuilder] Street furniture placed:", placed, "items")
-end
-
---------------------------------------------------------------------------------
--- 10. VEHICLE PLACEMENT (parked vehicles per district)
---------------------------------------------------------------------------------
-
-local function placeDistrictVehicles()
-	local count = 0
-
-	for _, d in ipairs(GTAConfig.DISTRICTS) do
-		local pool = GTAConfig.DISTRICT_VEHICLES[d.name]
-		if not pool or #pool == 0 then continue end
-
-		-- Place 2-4 vehicles per district along streets
-		local numVehicles = math.random(2, 4)
-		for i = 1, numVehicles do
-			local col = math.random(d.colMin, d.colMax)
-			local row = math.random(d.rowMin, d.rowMax)
-			local cx, cz = cellCenter(col, row)
-
-			-- Park on the street side (offset from block center)
-			local side = (i % 2 == 0) and 1 or -1
-			local px = cx + side * (BLOCK_SIZE / 2 + 4)
-			local pz = cz + math.random(-20, 20)
-
-			local template = pickRandom(pool)
-			if template then
-				local rotY = (side > 0) and 90 or -90
-				if placeVehicle(template, px, pz, rotY) then
-					count += 1
-				end
-			end
-		end
-	end
-
-	print("[CityBuilder] Parked vehicles placed:", count)
+	print("[CityBuilder] Elevated metro built with", #stations, "stations")
 end
 
 --------------------------------------------------------------------------------
@@ -776,58 +514,28 @@ end
 --------------------------------------------------------------------------------
 
 function CityBuilder.build(decorFolderRef, vehicleFolderRef, npcFolderRef)
-	-- Store refs
-	vehicleFolder = vehicleFolderRef
 	DecorUtils.decorFolder = decorFolderRef
 
-	-- Create road folder
+	-- Road folder for all infrastructure parts
 	local worldFolder = Workspace:FindFirstChild("World") or Workspace
-	local roadFolder = Instance.new("Folder")
+	roadFolder = Instance.new("Folder")
 	roadFolder.Name = "Roads"
 	roadFolder.Parent = worldFolder
 
-	-- 1. Terrain (island + ocean)
+	-- Phase 1: Infrastructure only
+	print("[CityBuilder] === Building infrastructure skeleton ===")
+
 	buildIslandTerrain()
-
-	-- 2. Water channel
+	buildDistrictTerrain()
+	buildMajorRoads()
 	buildWaterChannel()
-
-	-- 3. Roads
-	buildRoads(roadFolder)
-
-	-- 4. Railway
-	buildRailway(roadFolder)
-
-	-- 5. Elevated metro
+	buildBridges()
+	buildRailway()
 	buildElevatedMetro()
 
-	-- 6. Bridges over water channel
-	buildBridges()
-
-	-- 7. Reserve infrastructure cells BEFORE placing buildings
-	reserveInfrastructure()
-
-	-- 8. Districts (special first, then standard blocks)
-	buildAirport()
-	buildIndustrial()
-	buildMilitary()
-	buildPrison()
-	buildCommercial()
-	buildDowntown()
-	buildGovernment()
-	buildResidential()
-	buildHarbor()
-	buildWaterfront()
-	buildBeach()
-	buildSpace()
-
-	-- 9. Street furniture
-	buildStreetFurniture()
-
-	-- 10. Parked vehicles
-	placeDistrictVehicles()
-
-	print("[CityBuilder] === Full island build complete! ===")
+	print("[CityBuilder] === Infrastructure complete! ===")
+	print("[CityBuilder] Island size:", CITY_W, "x", CITY_D, "studs")
+	print("[CityBuilder] Grid:", COLS, "x", ROWS, "cells @", CELL, "studs each")
 end
 
 return CityBuilder
