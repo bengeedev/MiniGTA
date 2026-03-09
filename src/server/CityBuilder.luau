@@ -81,19 +81,6 @@ local function makePart(name, size, pos, material, color, parent, canCollide)
 	return p
 end
 
-local function makeWedge(name, size, cframe, material, color, parent)
-	local w = Instance.new("WedgePart")
-	w.Name = name
-	w.Anchored = true
-	w.Material = material
-	w.Color = color
-	w.TopSurface = Enum.SurfaceType.Smooth
-	w.BottomSurface = Enum.SurfaceType.Smooth
-	w.Size = size
-	w.CFrame = cframe
-	w.Parent = parent or roadFolder
-	return w
-end
 
 --------------------------------------------------------------------------------
 -- 1. ISLAND TERRAIN
@@ -388,41 +375,60 @@ local function buildMetroStation(x, z, stationName, isVertical)
 	tl.TextScaled = true
 	tl.Parent = sg
 
-	-- ACCESS STAIRS (ground → platform, on both sides of track)
-	local stairH = METRO_Y - GROUND_Y  -- height to climb
-	local stairLen = stairH * 2  -- gentle slope
-	local stairW = 6
+	-- ACCESS STAIRS (ground → platform, individual steps on both sides)
+	local stairH = METRO_Y - GROUND_Y  -- 18 studs to climb
+	local NUM_STEPS = 12
+	local STEP_H = stairH / NUM_STEPS       -- 1.5 studs per step
+	local STEP_D = 3                         -- depth per step
+	local STAIR_W = 6
 
 	for _, side in ipairs({-1, 1}) do
-		local stairOff = (isVertical and platW or platD) / 2 + stairLen / 2 + 2
-		local sx = isVertical and (x + side * stairOff) or x
-		local sz = isVertical and z or (z + side * stairOff)
+		-- Stairs start at the edge of the platform and go down to ground
+		local platEdge = isVertical and (platW / 2) or (platD / 2)
 
-		-- Stair ramp (wedge from ground to platform)
-		local wSize = Vector3.new(stairW, stairH, stairLen)
-		local wCF
-		if isVertical then
-			-- Stairs approach from east/west
-			local rot = (side > 0) and math.pi or 0
-			wCF = CFrame.new(sx, GROUND_Y + stairH / 2, sz) * CFrame.Angles(0, rot, 0)
-		else
-			-- Stairs approach from north/south
-			local rot = (side > 0) and -math.pi / 2 or math.pi / 2
-			wCF = CFrame.new(sx, GROUND_Y + stairH / 2, sz) * CFrame.Angles(0, rot, 0)
-		end
-		makeWedge("Stair_" .. stationName, wSize, wCF, Enum.Material.Concrete, Color3.fromRGB(160, 155, 145))
+		for i = 0, NUM_STEPS - 1 do
+			local stepY = GROUND_Y + (NUM_STEPS - i) * STEP_H - STEP_H / 2
+			local stepOffset = platEdge + 2 + i * STEP_D + STEP_D / 2
 
-		-- Stair railings
-		for _, rSide in ipairs({-1, 1}) do
-			local rOff = rSide * (stairW / 2 + 0.3)
-			local rPos
+			local stepX, stepZ
 			if isVertical then
-				rPos = Vector3.new(sx, GROUND_Y + stairH / 2 + 1, sz + rOff)
+				stepX = x + side * stepOffset
+				stepZ = z
 			else
-				rPos = Vector3.new(sx + rOff, GROUND_Y + stairH / 2 + 1, sz)
+				stepX = x
+				stepZ = z + side * stepOffset
 			end
-			local rSize = isVertical and Vector3.new(stairLen, 2, 0.5) or Vector3.new(0.5, 2, stairLen)
-			makePart("StairRail", rSize, rPos, Enum.Material.Metal, Color3.fromRGB(100, 100, 110))
+
+			-- Each step is a concrete block
+			makePart("Step", Vector3.new(
+				isVertical and STEP_D or STAIR_W,
+				STEP_H,
+				isVertical and STAIR_W or STEP_D
+			), Vector3.new(stepX, stepY, stepZ),
+				Enum.Material.Concrete, Color3.fromRGB(170, 165, 155))
+		end
+
+		-- Railings along the staircase
+		local totalStairLen = NUM_STEPS * STEP_D
+		local railCenterOffset = platEdge + 2 + totalStairLen / 2
+		local railMidY = GROUND_Y + stairH / 2 + 1
+
+		for _, rSide in ipairs({-1, 1}) do
+			local railX, railZ, railSize
+			if isVertical then
+				local rOff = rSide * (STAIR_W / 2 + 0.3)
+				railX = x + side * railCenterOffset
+				railZ = z + rOff
+				railSize = Vector3.new(totalStairLen, 2, 0.5)
+			else
+				local rOff = rSide * (STAIR_W / 2 + 0.3)
+				railX = x + rOff
+				railZ = z + side * railCenterOffset
+				railSize = Vector3.new(0.5, 2, totalStairLen)
+			end
+			makePart("StairRail", railSize,
+				Vector3.new(railX, railMidY, railZ),
+				Enum.Material.Metal, Color3.fromRGB(100, 100, 110))
 		end
 	end
 end
