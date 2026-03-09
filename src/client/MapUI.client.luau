@@ -219,8 +219,8 @@ local function drawWaterChannel(parent)
 
 	local w = Instance.new("Frame")
 	w.Name = "WaterChannel"
-	w.Position = UDim2.new(0.02, 0, v1, 0)
-	w.Size = UDim2.new(0.76, 0, v2 - v1, 0)
+	w.Position = UDim2.new(0, 0, v1, 0)
+	w.Size = UDim2.new(1, 0, v2 - v1, 0)
 	w.BackgroundColor3 = Color3.fromRGB(40, 130, 210)
 	w.BackgroundTransparency = 0.25
 	w.BorderSizePixel = 0
@@ -230,17 +230,18 @@ end
 
 local function drawLandmarks(parent)
 	local landmarks = {
-		{ icon = "✈",  col = 2.5, row = 1,   tip = "Terminal" },
-		{ icon = "⚡", col = 4.5, row = 0.5, tip = "Power Plant" },
-		{ icon = "☢",  col = 6,   row = 0,   tip = "Nuclear" },
-		{ icon = "★",  col = 7.5, row = 1,   tip = "Military HQ" },
-		{ icon = "🔒", col = 9,   row = 1,   tip = "Prison" },
-		{ icon = "🏛",  col = 6.5, row = 4,   tip = "White House" },
-		{ icon = "🗼", col = 7.2, row = 4,   tip = "Monument" },
-		{ icon = "🚂", col = 1,   row = 7,   tip = "Train Stn" },
-		{ icon = "⛳", col = 6.5, row = 7,   tip = "Golf" },
-		{ icon = "🚀", col = 8.5, row = 7,   tip = "Launchpad" },
-		{ icon = "👽", col = 9,   row = 7.5, tip = "UFO" },
+		{ icon = "✈",  col = 1.5,  row = 1,   tip = "Terminal" },
+		{ icon = "⚡", col = 7.5,  row = 1,   tip = "Power Plant" },
+		{ icon = "★",  col = 9.5,  row = 1,   tip = "Military HQ" },
+		{ icon = "☢",  col = 11,   row = 1,   tip = "Nuclear" },
+		{ icon = "🏛",  col = 7.5,  row = 4,   tip = "White House" },
+		{ icon = "🗼", col = 8,    row = 4,   tip = "Monument" },
+		{ icon = "🔒", col = 9,    row = 4,   tip = "Prison" },
+		{ icon = "🚂", col = 1,    row = 7,   tip = "Train Stn" },
+		{ icon = "💧", col = 3.5,  row = 7,   tip = "Water Plant" },
+		{ icon = "⛳", col = 8.5,  row = 7,   tip = "Golf" },
+		{ icon = "🚀", col = 10.5, row = 7,   tip = "Launchpad" },
+		{ icon = "👽", col = 11,   row = 7.5, tip = "UFO" },
 	}
 
 	for _, lm in ipairs(landmarks) do
@@ -321,18 +322,21 @@ fullMapOverlay.Visible = false
 fullMapOverlay.Parent = screenGui
 
 local mapAspect = CITY_W / CITY_D
-local MAP_H = 0.85
-local MAP_W = MAP_H * mapAspect
 
 local fullMap = Instance.new("Frame")
 fullMap.Name = "FullMap"
 fullMap.AnchorPoint = Vector2.new(0.5, 0.5)
 fullMap.Position = UDim2.new(0.5, 0, 0.5, 0)
-fullMap.Size = UDim2.new(MAP_W, 0, MAP_H, 0)
+fullMap.Size = UDim2.new(0.92, 0, 0.88, 0)
 fullMap.BackgroundColor3 = Color3.fromRGB(25, 50, 90)
 fullMap.BorderSizePixel = 0
 fullMap.ClipsDescendants = true
 fullMap.Parent = fullMapOverlay
+
+local aspectConstraint = Instance.new("UIAspectRatioConstraint")
+aspectConstraint.AspectRatio = mapAspect
+aspectConstraint.AspectType = Enum.AspectType.FitWithinMaxSize
+aspectConstraint.Parent = fullMap
 
 Instance.new("UICorner", fullMap).CornerRadius = UDim.new(0, 8)
 local fStroke = Instance.new("UIStroke", fullMap)
