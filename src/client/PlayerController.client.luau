@@ -6,6 +6,7 @@
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
+local ContextActionService = game:GetService("ContextActionService")
 
 local player = Players.LocalPlayer
 
@@ -29,19 +30,25 @@ local isSprinting  = false
 -- DISABLE ROBLOX DEFAULT MOVEMENT (we replace it entirely)
 --------------------------------------------------------------------------------
 
-local function disableDefaultControls()
+-- Sink WASD + arrows so the default PlayerModule never sees them
+ContextActionService:BindAction("TankControls_Sink", function()
+	return Enum.ContextActionResult.Sink
+end, false,
+	Enum.KeyCode.W, Enum.KeyCode.A, Enum.KeyCode.S, Enum.KeyCode.D,
+	Enum.KeyCode.Up, Enum.KeyCode.Down, Enum.KeyCode.Left, Enum.KeyCode.Right
+)
+
+-- Also disable PlayerModule controls as backup
+task.spawn(function()
 	local ok, err = pcall(function()
 		local playerScripts = player:WaitForChild("PlayerScripts", 10)
 		local PlayerModule = require(playerScripts:WaitForChild("PlayerModule"))
-		local controls = PlayerModule:GetControls()
-		controls:Disable()
+		PlayerModule:GetControls():Disable()
 	end)
 	if not ok then
 		warn("[PlayerController] Could not disable default controls:", err)
 	end
-end
-
-task.spawn(disableDefaultControls)
+end)
 
 --------------------------------------------------------------------------------
 -- HELPERS
