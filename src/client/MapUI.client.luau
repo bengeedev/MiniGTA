@@ -231,17 +231,17 @@ end
 local function drawLandmarks(parent)
 	local landmarks = {
 		{ icon = "✈",  col = 1.5,  row = 1,   tip = "Terminal" },
-		{ icon = "⚡", col = 7.5,  row = 1,   tip = "Power Plant" },
-		{ icon = "★",  col = 9.5,  row = 1,   tip = "Military HQ" },
-		{ icon = "☢",  col = 11,   row = 1,   tip = "Nuclear" },
-		{ icon = "🏛",  col = 7.5,  row = 4,   tip = "White House" },
-		{ icon = "🗼", col = 8,    row = 4,   tip = "Monument" },
-		{ icon = "🔒", col = 9,    row = 4,   tip = "Prison" },
-		{ icon = "🚂", col = 1,    row = 7,   tip = "Train Stn" },
-		{ icon = "💧", col = 3.5,  row = 7,   tip = "Water Plant" },
-		{ icon = "⛳", col = 8.5,  row = 7,   tip = "Golf" },
-		{ icon = "🚀", col = 10.5, row = 7,   tip = "Launchpad" },
-		{ icon = "👽", col = 11,   row = 7.5, tip = "UFO" },
+		{ icon = "⚡", col = 8,    row = 1,   tip = "Power Plant" },
+		{ icon = "★",  col = 10.5, row = 1,   tip = "Military HQ" },
+		{ icon = "☢",  col = 12.5, row = 1,   tip = "Nuclear" },
+		{ icon = "🏛",  col = 8.5,  row = 4.5, tip = "White House" },
+		{ icon = "🗼", col = 9,    row = 5,   tip = "Monument" },
+		{ icon = "🔒", col = 10.5, row = 4.5, tip = "Prison" },
+		{ icon = "🚂", col = 1,    row = 8,   tip = "Train Stn" },
+		{ icon = "💧", col = 4,    row = 8,   tip = "Water Plant" },
+		{ icon = "⛳", col = 10,   row = 8,   tip = "Golf" },
+		{ icon = "🚀", col = 12.5, row = 8,   tip = "Launchpad" },
+		{ icon = "👽", col = 13,   row = 8.5, tip = "UFO" },
 	}
 
 	for _, lm in ipairs(landmarks) do

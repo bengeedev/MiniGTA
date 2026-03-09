@@ -7,18 +7,18 @@ local GTAConfig = {}
 -- WORLD GRID
 --------------------------------------------------------------------------------
 
-GTAConfig.BLOCK_SIZE   = 100     -- building block footprint (studs)
-GTAConfig.STREET_WIDTH = 24      -- standard road width
-GTAConfig.HIGHWAY_WIDTH = 36     -- highway / ring-road width
-GTAConfig.CELL_SIZE    = 124     -- BLOCK_SIZE + STREET_WIDTH
-GTAConfig.GRID_COLS    = 12      -- city columns
-GTAConfig.GRID_ROWS    = 9       -- city rows
+GTAConfig.BLOCK_SIZE   = 140     -- building block footprint (studs)
+GTAConfig.STREET_WIDTH = 40      -- standard road width
+GTAConfig.HIGHWAY_WIDTH = 50     -- highway / ring-road width
+GTAConfig.CELL_SIZE    = 180     -- BLOCK_SIZE + STREET_WIDTH
+GTAConfig.GRID_COLS    = 14      -- city columns
+GTAConfig.GRID_ROWS    = 10      -- city rows
 GTAConfig.GROUND_Y     = 4       -- terrain surface
 GTAConfig.METRO_HEIGHT = 22      -- elevated metro track Y
 
 -- Total city extents
-GTAConfig.CITY_WIDTH = GTAConfig.CELL_SIZE * GTAConfig.GRID_COLS   -- 1488
-GTAConfig.CITY_DEPTH = GTAConfig.CELL_SIZE * GTAConfig.GRID_ROWS   -- 1116
+GTAConfig.CITY_WIDTH = GTAConfig.CELL_SIZE * GTAConfig.GRID_COLS   -- 2520
+GTAConfig.CITY_DEPTH = GTAConfig.CELL_SIZE * GTAConfig.GRID_ROWS   -- 1800
 
 -- City origin (top-left corner of grid — city centered)
 GTAConfig.CITY_ORIGIN_X = -GTAConfig.CITY_WIDTH / 2
@@ -34,16 +34,16 @@ GTAConfig.COASTLINE_WIDTH  = 30    -- sand transition
 GTAConfig.DEEP_SEA_Y       = -80
 
 -- Water channel (east-west canal between central & south rows)
-GTAConfig.WATER_CHANNEL_Z_ROW = 5.5   -- between row 5 and row 6
-GTAConfig.WATER_CHANNEL_WIDTH = 36
+GTAConfig.WATER_CHANNEL_Z_ROW = 6.5   -- between row 6 and row 7
+GTAConfig.WATER_CHANNEL_WIDTH = 50
 
 --------------------------------------------------------------------------------
 -- PLAYER SPAWN  (downtown center)
 --------------------------------------------------------------------------------
 
--- Downtown = cols 3-6, rows 3-5 → center col 4.5, row 4
-local _spawnX = -GTAConfig.CITY_WIDTH / 2 + 4.5 * GTAConfig.CELL_SIZE + GTAConfig.CELL_SIZE / 2
-local _spawnZ = -GTAConfig.CITY_DEPTH / 2 + 4 * GTAConfig.CELL_SIZE + GTAConfig.CELL_SIZE / 2
+-- Downtown = cols 4-7, rows 3-6 → center col 5.5, row 4.5
+local _spawnX = -GTAConfig.CITY_WIDTH / 2 + 5.5 * GTAConfig.CELL_SIZE + GTAConfig.CELL_SIZE / 2
+local _spawnZ = -GTAConfig.CITY_DEPTH / 2 + 4.5 * GTAConfig.CELL_SIZE + GTAConfig.CELL_SIZE / 2
 GTAConfig.SPAWN_POSITION = Vector3.new(_spawnX, GTAConfig.GROUND_Y + 5, _spawnZ)
 
 --------------------------------------------------------------------------------
@@ -68,7 +68,7 @@ GTAConfig.VEHICLE_SPEEDS = {
 GTAConfig.TURN_RATE = math.rad(120)
 
 --------------------------------------------------------------------------------
--- DISTRICTS  (15 districts on a 12×9 grid)
+-- DISTRICTS  (15 districts on a 14×10 grid)
 -- colMin/colMax & rowMin/rowMax are inclusive block indices.
 -- color is for the minimap overlay.
 --------------------------------------------------------------------------------
@@ -77,23 +77,23 @@ GTAConfig.DISTRICTS = {
 	-- Row 0-2 (North — airport, industry, utilities, restricted)
 	{ colMin = 0,  colMax = 3,  rowMin = 0, rowMax = 2, name = "airport",      color = Color3.fromRGB(150, 150, 150) },
 	{ colMin = 4,  colMax = 6,  rowMin = 0, rowMax = 2, name = "industrial",   color = Color3.fromRGB(140, 120, 90)  },
-	{ colMin = 7,  colMax = 8,  rowMin = 0, rowMax = 2, name = "power_plant",  color = Color3.fromRGB(220, 160, 40)  },
-	{ colMin = 9,  colMax = 10, rowMin = 0, rowMax = 2, name = "military",     color = Color3.fromRGB(80, 100, 60)   },
-	{ colMin = 11, colMax = 11, rowMin = 0, rowMax = 2, name = "nuclear",      color = Color3.fromRGB(80, 200, 60)   },
+	{ colMin = 7,  colMax = 9,  rowMin = 0, rowMax = 2, name = "power_plant",  color = Color3.fromRGB(220, 160, 40)  },
+	{ colMin = 10, colMax = 11, rowMin = 0, rowMax = 2, name = "military",     color = Color3.fromRGB(80, 100, 60)   },
+	{ colMin = 12, colMax = 13, rowMin = 0, rowMax = 2, name = "nuclear",      color = Color3.fromRGB(80, 200, 60)   },
 
-	-- Row 3-5 (Central — city core)
-	{ colMin = 0,  colMax = 2,  rowMin = 3, rowMax = 5, name = "commercial",   color = Color3.fromRGB(200, 180, 100) },
-	{ colMin = 3,  colMax = 6,  rowMin = 3, rowMax = 5, name = "downtown",     color = Color3.fromRGB(100, 140, 200) },
-	{ colMin = 7,  colMax = 8,  rowMin = 3, rowMax = 5, name = "government",   color = Color3.fromRGB(220, 220, 220) },
-	{ colMin = 9,  colMax = 9,  rowMin = 3, rowMax = 5, name = "prison",       color = Color3.fromRGB(100, 100, 100) },
-	{ colMin = 10, colMax = 11, rowMin = 3, rowMax = 5, name = "residential",  color = Color3.fromRGB(160, 200, 140) },
+	-- Row 3-6 (Central — city core, 4 rows deep)
+	{ colMin = 0,  colMax = 3,  rowMin = 3, rowMax = 6, name = "commercial",   color = Color3.fromRGB(200, 180, 100) },
+	{ colMin = 4,  colMax = 7,  rowMin = 3, rowMax = 6, name = "downtown",     color = Color3.fromRGB(100, 140, 200) },
+	{ colMin = 8,  colMax = 9,  rowMin = 3, rowMax = 6, name = "government",   color = Color3.fromRGB(220, 220, 220) },
+	{ colMin = 10, colMax = 11, rowMin = 3, rowMax = 6, name = "prison",       color = Color3.fromRGB(100, 100, 100) },
+	{ colMin = 12, colMax = 13, rowMin = 3, rowMax = 6, name = "residential",  color = Color3.fromRGB(160, 200, 140) },
 
-	-- Row 6-8 (South — coastal)
-	{ colMin = 0,  colMax = 2,  rowMin = 6, rowMax = 8, name = "harbor",       color = Color3.fromRGB(120, 100, 80)  },
-	{ colMin = 3,  colMax = 4,  rowMin = 6, rowMax = 8, name = "water_plant",  color = Color3.fromRGB(60, 160, 200)  },
-	{ colMin = 5,  colMax = 7,  rowMin = 6, rowMax = 8, name = "waterfront",   color = Color3.fromRGB(100, 180, 200) },
-	{ colMin = 8,  colMax = 9,  rowMin = 6, rowMax = 8, name = "beach",        color = Color3.fromRGB(240, 220, 160) },
-	{ colMin = 10, colMax = 11, rowMin = 6, rowMax = 8, name = "space",        color = Color3.fromRGB(60, 60, 80)    },
+	-- Row 7-9 (South — coastal)
+	{ colMin = 0,  colMax = 2,  rowMin = 7, rowMax = 9, name = "harbor",       color = Color3.fromRGB(120, 100, 80)  },
+	{ colMin = 3,  colMax = 5,  rowMin = 7, rowMax = 9, name = "water_plant",  color = Color3.fromRGB(60, 160, 200)  },
+	{ colMin = 6,  colMax = 8,  rowMin = 7, rowMax = 9, name = "waterfront",   color = Color3.fromRGB(100, 180, 200) },
+	{ colMin = 9,  colMax = 11, rowMin = 7, rowMax = 9, name = "beach",        color = Color3.fromRGB(240, 220, 160) },
+	{ colMin = 12, colMax = 13, rowMin = 7, rowMax = 9, name = "space",        color = Color3.fromRGB(60, 60, 80)    },
 }
 
 -- Building pools per district (asset names matching DecorCreation PROCEDURAL_BUILDERS)
