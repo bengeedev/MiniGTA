@@ -10,10 +10,10 @@ local Workspace = game:GetService("Workspace")
 local player = Players.LocalPlayer
 
 -- Camera config
-local distance = 14
-local HEIGHT = 8
+local distance = 10
+local HEIGHT = 6
 local LOOK_OFFSET_Y = 2
-local FOLLOW_SPEED = 1.5 -- Very gentle follow (was 6 before — too fast)
+local FOLLOW_SPEED = 0.8 -- Smooth and gentle follow
 local MIN_ZOOM = 6
 local MAX_ZOOM = 50
 
