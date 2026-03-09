@@ -11,6 +11,7 @@ local DecorCreation = require(script.Parent:WaitForChild("DecorCreation"))
 local DecorUtils = require(script.Parent:WaitForChild("DecorCreation"):WaitForChild("decor"):WaitForChild("DecorUtils"))
 local HighSpeedTrack = require(script.Parent:WaitForChild("DecorCreation"):WaitForChild("decor"):WaitForChild("HighSpeedTrack"))
 local RailwayCrossing = require(script.Parent:WaitForChild("DecorCreation"):WaitForChild("decor"):WaitForChild("RailwayCrossing"))
+local WaterBridge = require(script.Parent:WaitForChild("DecorCreation"):WaitForChild("decor"):WaitForChild("WaterBridge"))
 
 local CityBuilder = {}
 local Terrain = Workspace.Terrain
@@ -150,6 +151,7 @@ local function buildSurface()
 	-- B. H-LANE STRIPS (segmented around compound zones)
 	--------------------------------------------------------------------
 	for _, h in ipairs(hLanes) do
+		if h.type == "water" then continue end -- handled by buildWaterChannel
 		local z = GTAConfig.getRowEdgeZ(h.row)
 		local w = getLaneWidth(h.type)
 		local laneMat = getLaneFillMaterial(h.type)
@@ -293,6 +295,103 @@ local function buildRailwayTracks()
 end
 
 --------------------------------------------------------------------------------
+-- 4. WATER CHANNEL (river at water H-lanes + bridge crossings)
+--------------------------------------------------------------------------------
+
+local function buildWaterChannel()
+	local hLanes = GTAConfig.H_LANES
+	local vLanes = GTAConfig.V_LANES
+	local cityLeft  = ORIGIN_X - 30
+	local cityRight = ORIGIN_X + CITY_W + 30
+	local channelCount = 0
+	local bridgeCount = 0
+
+	-- Water fill: Y=-4 to Y=2 → surface at Y=2, 6 studs deep, no flicker
+	local WATER_Y = -1   -- center of fill
+	local WATER_H = 6    -- height of fill
+	local BANK_H  = 5    -- riverbank wall height
+	local BANK_W  = 2    -- riverbank wall thickness
+
+	local C_BANK = Color3.fromRGB(100, 95, 90)
+
+	for _, h in ipairs(hLanes) do
+		if h.type ~= "water" then continue end
+		local z = GTAConfig.getRowEdgeZ(h.row)
+		local w = getLaneWidth(h.type)
+
+		-- Compute segments (skip compound zones)
+		local skipRanges = {}
+		for _, r in ipairs(GTAConfig.getCompoundRects()) do
+			if z > r.z1 and z < r.z2 then
+				table.insert(skipRanges, { r.x1, r.x2 })
+			end
+		end
+		table.sort(skipRanges, function(a, b) return a[1] < b[1] end)
+
+		local curX = cityLeft
+		for _, skip in ipairs(skipRanges) do
+			if curX < skip[1] then
+				local segW = skip[1] - curX
+				local cx = (curX + skip[1]) / 2
+
+				-- Water fill (lower than ground, surface at Y=2)
+				Terrain:FillBlock(CFrame.new(cx, WATER_Y, z), Vector3.new(segW, WATER_H, w), Enum.Material.Water)
+
+				-- Riverbank walls (north + south edges)
+				for _, sideZ in ipairs({-1, 1}) do
+					local bankZ = z + sideZ * (w / 2 - BANK_W / 2)
+					local bank = Instance.new("Part")
+					bank.Name = "Riverbank"
+					bank.Size = Vector3.new(segW, BANK_H, BANK_W)
+					bank.Position = Vector3.new(cx, GROUND_Y - BANK_H / 2 + 1, bankZ)
+					bank.Anchored = true
+					bank.CanCollide = true
+					bank.Material = Enum.Material.Slate
+					bank.Color = C_BANK
+					bank.Parent = DecorUtils.decorFolder
+				end
+
+				channelCount += 1
+			end
+			curX = math.max(curX, skip[2])
+		end
+		if curX < cityRight then
+			local segW = cityRight - curX
+			local cx = (curX + cityRight) / 2
+
+			Terrain:FillBlock(CFrame.new(cx, WATER_Y, z), Vector3.new(segW, WATER_H, w), Enum.Material.Water)
+
+			for _, sideZ in ipairs({-1, 1}) do
+				local bankZ = z + sideZ * (w / 2 - BANK_W / 2)
+				local bank = Instance.new("Part")
+				bank.Name = "Riverbank"
+				bank.Size = Vector3.new(segW, BANK_H, BANK_W)
+				bank.Position = Vector3.new(cx, GROUND_Y - BANK_H / 2 + 1, bankZ)
+				bank.Anchored = true
+				bank.CanCollide = true
+				bank.Material = Enum.Material.Slate
+				bank.Color = C_BANK
+				bank.Parent = DecorUtils.decorFolder
+			end
+
+			channelCount += 1
+		end
+
+		-- Place bridge blocks at V-lane crossings
+		for _, v in ipairs(vLanes) do
+			local vx = GTAConfig.getColEdgeX(v.col)
+			local vw = getLaneWidth(v.type)
+			if not GTAConfig.isInsideCompound(vx, z) then
+				WaterBridge.create(vx, z, vw, w, 1)
+				bridgeCount += 1
+			end
+		end
+	end
+
+	print("[CityBuilder] Water channel:", channelCount, "segments,", bridgeCount, "bridges")
+end
+
+--------------------------------------------------------------------------------
 -- PUBLIC API
 --------------------------------------------------------------------------------
 
@@ -309,6 +408,7 @@ function CityBuilder.build(decorFolderRef, vehicleFolderRef, npcFolderRef)
 	buildFoundation()
 	buildSurface()
 	buildRailwayTracks()
+	buildWaterChannel()
 
 	print("[CityBuilder] === City complete! ===")
 end

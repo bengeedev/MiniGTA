@@ -99,11 +99,11 @@ GTAConfig.LANE_TYPES = {
 		bufferStops = true,
 	},
 	water = {
-		width = 50,
+		width = 80,
 		material = Enum.Material.Water,
 		color = Color3.fromRGB(40, 130, 210),
 		mapColor = Color3.fromRGB(40, 130, 210),
-		mapThickness = 0, -- uses real width on map
+		mapThickness = 8,
 		bridges = true,
 	},
 	elevated_highway = {

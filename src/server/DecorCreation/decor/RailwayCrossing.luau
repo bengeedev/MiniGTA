@@ -137,15 +137,16 @@ function RailwayCrossing.create(x, z, roadWidth, scale)
 	---------------------------------------------------------------------------
 	-- 5. RAILROAD CROSSING SIGNS (X-shaped crossbuck, both sides of road)
 	---------------------------------------------------------------------------
-	for _, sideX in ipairs({-1, 1}) do
-		local signX = x + sideX * (roadWidth / 2 + 3)
+	for _, sideZ in ipairs({-1, 1}) do
+		local signX = x + roadWidth / 2 + 3
+		local signZ = z + sideZ * (railGauge + 10) * scale
 		local signY = surfaceY + 6 * scale
 
 		-- Sign pole
 		local sPole = Instance.new("Part")
 		sPole.Name = "SignPole"
 		sPole.Size = Vector3.new(0.4 * scale, 6 * scale, 0.4 * scale)
-		sPole.Position = Vector3.new(signX, surfaceY + 3 * scale, z)
+		sPole.Position = Vector3.new(signX, surfaceY + 3 * scale, signZ)
 		sPole.Anchored = true
 		sPole.CanCollide = false
 		sPole.Material = Enum.Material.Metal
@@ -157,7 +158,7 @@ function RailwayCrossing.create(x, z, roadWidth, scale)
 			local board = Instance.new("Part")
 			board.Name = "Crossbuck"
 			board.Size = Vector3.new(4 * scale, 0.4 * scale, 0.3 * scale)
-			board.CFrame = CFrame.new(signX, signY, z) * CFrame.Angles(0, 0, math.rad(angle))
+			board.CFrame = CFrame.new(signX, signY, signZ) * CFrame.Angles(0, 0, math.rad(angle))
 			board.Anchored = true
 			board.CanCollide = false
 			board.Material = Enum.Material.SmoothPlastic

@@ -318,6 +318,7 @@ local legendEntries = {
 	{ Color3.fromRGB(240, 210, 80), "Highway" },
 	{ Color3.fromRGB(200, 200, 190), "Road" },
 	{ Color3.fromRGB(139, 69, 19), "Railway" },
+	{ Color3.fromRGB(40, 130, 210), "River" },
 	{ Color3.fromRGB(255, 255, 50), "You" },
 }
 
