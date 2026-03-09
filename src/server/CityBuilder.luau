@@ -27,6 +27,90 @@ local CITY_D       = GTAConfig.CITY_DEPTH
 local vehicleFolder = nil
 
 --------------------------------------------------------------------------------
+-- OCCUPANCY GRID
+-- Tracks which cells are reserved (infrastructure, landmarks).
+-- Buildings only go in free cells.
+-- Values: nil/false = free, string = reason reserved
+--------------------------------------------------------------------------------
+
+local occupancy = {}  -- occupancy[col][row] = "reason" or nil
+
+local function reserveCell(col, row, reason)
+	if col < 0 or col >= COLS or row < 0 or row >= ROWS then return end
+	if not occupancy[col] then occupancy[col] = {} end
+	occupancy[col][row] = reason or "reserved"
+end
+
+local function isCellFree(col, row)
+	if not occupancy[col] then return true end
+	return not occupancy[col][row]
+end
+
+-- Reserve cells for infrastructure lanes BEFORE placing buildings
+local function reserveInfrastructure()
+	-- Railway at col 4 boundary → reserve cells on both sides (col 3 and col 4)
+	for row = 0, ROWS - 1 do
+		reserveCell(3, row, "railway_adj")
+		reserveCell(4, row, "railway_adj")
+	end
+
+	-- Elevated metro E-W at row 4 → reserve row 4 cells along the metro path
+	for col = 0, COLS - 1 do
+		reserveCell(col, 4, "metro_ew")
+	end
+
+	-- Elevated metro N-S at col 5 → reserve col 5 cells
+	for row = 0, ROWS - 1 do
+		reserveCell(5, row, "metro_ns")
+	end
+
+	-- Water channel at row 5.5 → reserve rows 5 and 6 (both sides of channel)
+	for col = 0, COLS - 1 do
+		reserveCell(col, 5, "water_channel")
+		reserveCell(col, 6, "water_channel")
+	end
+
+	-- Special compound districts (no standard block placement at all)
+	local compoundDistricts = { "military", "prison", "space" }
+	for _, dName in ipairs(compoundDistricts) do
+		local d = GTAConfig.getDistrictDef(dName)
+		if d then
+			for col = d.colMin, d.colMax do
+				for row = d.rowMin, d.rowMax do
+					reserveCell(col, row, "compound_" .. dName)
+				end
+			end
+		end
+	end
+
+	-- Government: reserve center cells for White House compound
+	local gov = GTAConfig.getDistrictDef("government")
+	if gov then
+		local midCol = math.floor((gov.colMin + gov.colMax) / 2)
+		local midRow = math.floor((gov.rowMin + gov.rowMax) / 2)
+		reserveCell(midCol, midRow, "whitehouse")
+		reserveCell(midCol + 1, midRow, "whitehouse")
+		reserveCell(midCol, midRow + 1, "national_mall")
+		reserveCell(midCol + 1, midRow + 1, "monument")
+	end
+
+	-- Airport: reserve runway cells (cols 0-2, center row of airport)
+	local apt = GTAConfig.getDistrictDef("airport")
+	if apt then
+		local runwayRow = math.floor((apt.rowMin + apt.rowMax) / 2)
+		for col = apt.colMin, apt.colMin + 2 do
+			reserveCell(col, runwayRow, "runway")
+		end
+	end
+
+	local count = 0
+	for c, rows in pairs(occupancy) do
+		for r, _ in pairs(rows) do count += 1 end
+	end
+	print("[CityBuilder] Occupancy grid: ", count, "cells reserved")
+end
+
+--------------------------------------------------------------------------------
 -- HELPERS
 --------------------------------------------------------------------------------
 
@@ -285,7 +369,7 @@ end
 -- 7. DISTRICT BUILDING PLACEMENT
 --------------------------------------------------------------------------------
 
--- Place standard block buildings for a district
+-- Place standard block buildings for a district (respects occupancy grid)
 local function buildStandardBlocks(districtName)
 	local def = GTAConfig.getDistrictDef(districtName)
 	if not def then return end
@@ -293,17 +377,24 @@ local function buildStandardBlocks(districtName)
 	local pool = GTAConfig.DISTRICT_BUILDINGS[districtName]
 	if not pool or #pool == 0 then return end
 
+	-- Keep buildings well inside the block (away from roads at cell edges)
+	-- Block is 100 studs, roads at edges. Place at ±20 from center = 40 studs from road.
+	local INSET = 20
+
 	local placed = 0
 	for col = def.colMin, def.colMax do
 		for row = def.rowMin, def.rowMax do
+			-- Skip reserved cells (infrastructure, landmarks)
+			if not isCellFree(col, row) then continue end
+
 			local cx, cz = cellCenter(col, row)
 
-			-- Quadrant offsets within the block
+			-- Quadrant offsets within the block (well inside, not near road edges)
 			local offsets = {
-				{ -BLOCK_SIZE / 4, -BLOCK_SIZE / 4 },
-				{  BLOCK_SIZE / 4, -BLOCK_SIZE / 4 },
-				{ -BLOCK_SIZE / 4,  BLOCK_SIZE / 4 },
-				{  BLOCK_SIZE / 4,  BLOCK_SIZE / 4 },
+				{ -INSET, -INSET },
+				{  INSET, -INSET },
+				{ -INSET,  INSET },
+				{  INSET,  INSET },
 			}
 
 			-- Place 2-3 buildings per block (not all 4, for variety/performance)
@@ -474,15 +565,12 @@ local function buildGovernment()
 	-- Fountain in front of White House
 	DecorCreation.place("fountain", cx, cz - 40, 1)
 
-	-- Government buildings around the compound edges
+	-- Government buildings around the compound edges (only in free cells)
 	local def = GTAConfig.getDistrictDef("government")
 	local pool = GTAConfig.DISTRICT_BUILDINGS["government"]
 	for col = def.colMin, def.colMax do
 		for row = def.rowMin, def.rowMax do
-			-- Skip center cells (White House area)
-			local midCol = (def.colMin + def.colMax) / 2
-			local midRow = (def.rowMin + def.rowMax) / 2
-			if math.abs(col - midCol) > 0.6 or math.abs(row - midRow) > 0.6 then
+			if isCellFree(col, row) then
 				local bx, bz = cellCenter(col, row)
 				local asset = pickRandom(pool)
 				if asset then
@@ -716,7 +804,10 @@ function CityBuilder.build(decorFolderRef, vehicleFolderRef, npcFolderRef)
 	-- 6. Bridges over water channel
 	buildBridges()
 
-	-- 7. Districts (special first, then standard blocks)
+	-- 7. Reserve infrastructure cells BEFORE placing buildings
+	reserveInfrastructure()
+
+	-- 8. Districts (special first, then standard blocks)
 	buildAirport()
 	buildIndustrial()
 	buildMilitary()
@@ -730,10 +821,10 @@ function CityBuilder.build(decorFolderRef, vehicleFolderRef, npcFolderRef)
 	buildBeach()
 	buildSpace()
 
-	-- 8. Street furniture
+	-- 9. Street furniture
 	buildStreetFurniture()
 
-	-- 9. Parked vehicles
+	-- 10. Parked vehicles
 	placeDistrictVehicles()
 
 	print("[CityBuilder] === Full island build complete! ===")
