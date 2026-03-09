@@ -9,6 +9,8 @@ local Shared = ReplicatedStorage:WaitForChild("Shared", 10)
 local GTAConfig = require(Shared:WaitForChild("GTAConfig"))
 local DecorCreation = require(script.Parent:WaitForChild("DecorCreation"))
 local DecorUtils = require(script.Parent:WaitForChild("DecorCreation"):WaitForChild("decor"):WaitForChild("DecorUtils"))
+local HighSpeedTrack = require(script.Parent:WaitForChild("DecorCreation"):WaitForChild("decor"):WaitForChild("HighSpeedTrack"))
+local RailwayCrossing = require(script.Parent:WaitForChild("DecorCreation"):WaitForChild("decor"):WaitForChild("RailwayCrossing"))
 
 local CityBuilder = {}
 local Terrain = Workspace.Terrain
@@ -66,8 +68,16 @@ local COMPOUND = {
 --------------------------------------------------------------------------------
 
 local function getLaneWidth(laneType)
-	if laneType == "highway" then return HIGHWAY_W end
+	local def = GTAConfig.LANE_TYPES[laneType]
+	if def then return def.width end
 	return ROAD_W
+end
+
+local function getLaneFillMaterial(laneType)
+	if laneType == "railway" then
+		return GTAConfig.LANE_TYPES.railway.material
+	end
+	return Enum.Material.Asphalt
 end
 
 local function fillSurface(cx, cz, w, d, material)
@@ -209,6 +219,7 @@ local function buildSurface()
 	for _, h in ipairs(hLanes) do
 		local z = GTAConfig.getRowEdgeZ(h.row)
 		local w = getLaneWidth(h.type)
+		local laneMat = getLaneFillMaterial(h.type)
 
 		-- Collect X ranges to skip (compound zones that this H-lane passes through)
 		local skipRanges = {}
@@ -224,14 +235,14 @@ local function buildSurface()
 		for _, skip in ipairs(skipRanges) do
 			if curX < skip[1] then
 				local segW = skip[1] - curX
-				fillSurface((curX + skip[1]) / 2, z, segW, w, Enum.Material.Asphalt)
+				fillSurface((curX + skip[1]) / 2, z, segW, w, laneMat)
 				laneCount += 1
 			end
 			curX = math.max(curX, skip[2])
 		end
 		if curX < cityRight then
 			local segW = cityRight - curX
-			fillSurface((curX + cityRight) / 2, z, segW, w, Enum.Material.Asphalt)
+			fillSurface((curX + cityRight) / 2, z, segW, w, laneMat)
 			laneCount += 1
 		end
 	end
@@ -280,6 +291,75 @@ local function buildSurface()
 end
 
 --------------------------------------------------------------------------------
+-- 3. RAILWAY TRACKS (highspeed rail parts on "railway" H-lanes)
+--------------------------------------------------------------------------------
+
+local function buildRailwayTracks()
+	local hLanes = GTAConfig.H_LANES
+	local vLanes = GTAConfig.V_LANES
+	local cityLeft  = ORIGIN_X - 30
+	local cityRight = ORIGIN_X + CITY_W + 30
+	local trackCount = 0
+	local crossingCount = 0
+
+	for _, h in ipairs(hLanes) do
+		if h.type ~= "railway" then continue end
+		local z = GTAConfig.getRowEdgeZ(h.row)
+
+		-- Collect all zones to skip: compound zones + road crossings
+		local skipRanges = {}
+
+		for _, r in ipairs(compoundRects) do
+			if z > r.z1 and z < r.z2 then
+				table.insert(skipRanges, { x1 = r.x1, x2 = r.x2, crossing = false })
+			end
+		end
+
+		-- Each V-lane that crosses this railway = a crossing block
+		local crossings = {}
+		for _, v in ipairs(vLanes) do
+			local vx = GTAConfig.getColEdgeX(v.col)
+			local vw = getLaneWidth(v.type)
+			if not isInsideCompound(vx, z) then
+				table.insert(crossings, { x = vx, width = vw })
+				table.insert(skipRanges, { x1 = vx - vw / 2, x2 = vx + vw / 2, crossing = true })
+			end
+		end
+
+		table.sort(skipRanges, function(a, b) return a.x1 < b.x1 end)
+
+		-- Build track segments between all skip zones
+		local segments = {}
+		local curX = cityLeft
+		for _, skip in ipairs(skipRanges) do
+			if curX < skip.x1 then
+				table.insert(segments, { curX, skip.x1 })
+			end
+			curX = math.max(curX, skip.x2)
+		end
+		if curX < cityRight then
+			table.insert(segments, { curX, cityRight })
+		end
+
+		-- Place track segments (buffer stops only at very first/last)
+		for i, seg in ipairs(segments) do
+			local leftBuf = (i == 1)
+			local rightBuf = (i == #segments)
+			HighSpeedTrack.createSegment(seg[1], seg[2], z, 1, leftBuf, rightBuf)
+			trackCount += 1
+		end
+
+		-- Place crossing blocks at each road intersection
+		for _, c in ipairs(crossings) do
+			RailwayCrossing.create(c.x, z, c.width, 1)
+			crossingCount += 1
+		end
+	end
+
+	print("[CityBuilder] Railway:", trackCount, "track segments,", crossingCount, "crossings")
+end
+
+--------------------------------------------------------------------------------
 -- PUBLIC API
 --------------------------------------------------------------------------------
 
@@ -296,6 +376,7 @@ function CityBuilder.build(decorFolderRef, vehicleFolderRef, npcFolderRef)
 	computeCompoundRects()
 	buildFoundation()
 	buildSurface()
+	buildRailwayTracks()
 
 	print("[CityBuilder] === City complete! ===")
 end

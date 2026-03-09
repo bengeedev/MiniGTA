@@ -77,13 +77,10 @@ local function drawDistricts(parent, isDetailed)
 	end
 end
 
--- Draw a road line on the map
-local function drawRoadLine(parent, u1, v1, u2, v2, isVertical, isHighway)
-	local thickness = isHighway and 4 or 3
-	local color = isHighway and Color3.fromRGB(240, 210, 80) or Color3.fromRGB(200, 200, 190)
-
+-- Draw a lane line on the map (color + thickness from lane type)
+local function drawLaneLine(parent, u1, v1, u2, v2, isVertical, color, thickness)
 	local line = Instance.new("Frame")
-	line.Name = "Road"
+	line.Name = "Lane"
 	if isVertical then
 		line.AnchorPoint = Vector2.new(0.5, 0)
 		line.Position = UDim2.new(u1, 0, v1, 0)
@@ -101,18 +98,26 @@ local function drawRoadLine(parent, u1, v1, u2, v2, isVertical, isHighway)
 	return line
 end
 
--- Draw all roads from GTAConfig (Phase 1: all lanes as asphalt roads)
+-- Draw all lanes from GTAConfig using lane type colors
 local function drawAllLanes(parent, _isDetailed)
 	-- H-lanes
 	for _, lane in ipairs(GTAConfig.H_LANES) do
 		local _, v = worldToScale(0, GTAConfig.getRowEdgeZ(lane.row))
-		drawRoadLine(parent, 0, v, 1, v, false, lane.type == "highway")
+		local def = GTAConfig.LANE_TYPES[lane.type]
+		local color = def and def.mapColor or Color3.fromRGB(200, 200, 190)
+		local thick = def and def.mapThickness or 3
+		if thick == 0 then thick = 6 end
+		drawLaneLine(parent, 0, v, 1, v, false, color, thick)
 	end
 
-	-- V-lanes (full length)
+	-- V-lanes
 	for _, lane in ipairs(GTAConfig.V_LANES) do
 		local u, _ = worldToScale(GTAConfig.getColEdgeX(lane.col), 0)
-		drawRoadLine(parent, u, 0, u, 1, true, lane.type == "highway")
+		local def = GTAConfig.LANE_TYPES[lane.type]
+		local color = def and def.mapColor or Color3.fromRGB(200, 200, 190)
+		local thick = def and def.mapThickness or 3
+		if thick == 0 then thick = 6 end
+		drawLaneLine(parent, u, 0, u, 1, true, color, thick)
 	end
 end
 
@@ -260,10 +265,11 @@ legend.ZIndex = 8
 legend.Parent = fullMap
 Instance.new("UICorner", legend).CornerRadius = UDim.new(0, 4)
 
--- Build legend entries (Phase 1: roads only)
+-- Build legend entries
 local legendEntries = {
 	{ Color3.fromRGB(240, 210, 80), "Highway" },
 	{ Color3.fromRGB(200, 200, 190), "Road" },
+	{ Color3.fromRGB(139, 69, 19), "Railway" },
 	{ Color3.fromRGB(255, 255, 50), "You" },
 }
 
