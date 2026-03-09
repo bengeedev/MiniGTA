@@ -1,11 +1,12 @@
 -- PlayerController.client.luau
 -- GTA-style tank controls: A/D rotate, W/S forward/back, Shift sprint, Space jump.
--- Uses AlignOrientation for rotation (works with physics, no moonwalk).
--- Camera (FreeCam) untouched — smooth auto-follow.
+-- Disables Roblox default WASD — we handle everything.
+-- Camera (FreeCam) is untouched — it smoothly drifts behind the character.
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
+local ContextActionService = game:GetService("ContextActionService")
 
 local player = Players.LocalPlayer
 
@@ -15,8 +16,8 @@ local player = Players.LocalPlayer
 
 local WALK_SPEED      = 16
 local SPRINT_SPEED    = 32
-local BACK_SPEED_MULT = 0.5
-local TURN_SPEED      = math.rad(200)   -- rotation speed
+local BACK_SPEED_MULT = 0.5              -- backward is slower
+local TURN_SPEED      = math.rad(200)    -- rotation speed (degrees/s)
 
 --------------------------------------------------------------------------------
 -- STATE
@@ -24,12 +25,20 @@ local TURN_SPEED      = math.rad(200)   -- rotation speed
 
 local characterYaw = 0
 local isSprinting  = false
-local alignOrientation = nil   -- AlignOrientation constraint (created per character)
 
 --------------------------------------------------------------------------------
--- DISABLE ROBLOX DEFAULT MOVEMENT
+-- DISABLE ROBLOX DEFAULT MOVEMENT (we replace it entirely)
 --------------------------------------------------------------------------------
 
+-- Sink WASD + arrows so the default PlayerModule never sees them
+ContextActionService:BindAction("TankControls_Sink", function()
+	return Enum.ContextActionResult.Sink
+end, false,
+	Enum.KeyCode.W, Enum.KeyCode.A, Enum.KeyCode.S, Enum.KeyCode.D,
+	Enum.KeyCode.Up, Enum.KeyCode.Down, Enum.KeyCode.Left, Enum.KeyCode.Right
+)
+
+-- Also disable PlayerModule controls as backup
 task.spawn(function()
 	local ok, err = pcall(function()
 		local playerScripts = player:WaitForChild("PlayerScripts", 10)
@@ -55,7 +64,7 @@ local function initYaw(hrp)
 end
 
 --------------------------------------------------------------------------------
--- SPRINT
+-- SPRINT (Shift toggle)
 --------------------------------------------------------------------------------
 
 UserInputService.InputBegan:Connect(function(input, processed)
@@ -77,31 +86,12 @@ end)
 
 local function setupCharacter(character)
 	local hrp = character:WaitForChild("HumanoidRootPart", 5)
-	if not hrp then return end
-
-	initYaw(hrp)
+	if hrp then initYaw(hrp) end
 
 	local humanoid = character:WaitForChild("Humanoid", 5)
 	if humanoid then
-		humanoid.AutoRotate = false
+		humanoid.AutoRotate = false  -- we handle rotation
 	end
-
-	-- AlignOrientation: rotates character via physics (no CFrame fighting)
-	local attachment = hrp:FindFirstChild("RootRigAttachment")
-		or hrp:FindFirstChildWhichIsA("Attachment")
-	if not attachment then
-		attachment = Instance.new("Attachment")
-		attachment.Name = "RootRigAttachment"
-		attachment.Parent = hrp
-	end
-
-	alignOrientation = Instance.new("AlignOrientation")
-	alignOrientation.Name = "TankControlGyro"
-	alignOrientation.Mode = Enum.OrientationAlignmentMode.OneAttachment
-	alignOrientation.Attachment0 = attachment
-	alignOrientation.RigidityEnabled = true
-	alignOrientation.CFrame = CFrame.Angles(0, characterYaw, 0)
-	alignOrientation.Parent = hrp
 end
 
 player.CharacterAdded:Connect(setupCharacter)
@@ -119,28 +109,27 @@ RunService.RenderStepped:Connect(function(dt)
 	local humanoid = character:FindFirstChildOfClass("Humanoid")
 	if not humanoid or humanoid.Health <= 0 then return end
 
-	-- Skip if typing or seated
+	-- Skip if typing in chat or seated in vehicle
 	if UserInputService:GetFocusedTextBox() then return end
 	if humanoid.Sit then return end
 
-	-- Rotation: A/D or arrow keys
+	-- Rotation: A/D or Left/Right arrows
+	local turning = false
 	if isDown(Enum.KeyCode.A) or isDown(Enum.KeyCode.Left) then
 		characterYaw = characterYaw + TURN_SPEED * dt
+		turning = true
 	end
 	if isDown(Enum.KeyCode.D) or isDown(Enum.KeyCode.Right) then
 		characterYaw = characterYaw - TURN_SPEED * dt
+		turning = true
 	end
 
-	-- Apply rotation via AlignOrientation (physics-friendly, no moonwalk)
-	if alignOrientation then
-		alignOrientation.CFrame = CFrame.Angles(0, characterYaw, 0)
-	end
+	-- Apply rotation (preserve physics position, only change facing)
+	hrp.CFrame = CFrame.new(hrp.Position) * CFrame.Angles(0, characterYaw, 0)
 
-	-- Compute facing direction from our yaw (not from hrp.CFrame which may lag)
-	local lookDir = CFrame.Angles(0, characterYaw, 0).LookVector
-
-	-- Movement: W/S or arrow keys
+	-- Movement: W/S or Up/Down arrows
 	local speed = isSprinting and SPRINT_SPEED or WALK_SPEED
+	local lookDir = hrp.CFrame.LookVector
 	local moveDir = Vector3.zero
 
 	if isDown(Enum.KeyCode.W) or isDown(Enum.KeyCode.Up) then
@@ -153,7 +142,7 @@ RunService.RenderStepped:Connect(function(dt)
 	humanoid.WalkSpeed = speed
 	humanoid:Move(moveDir)
 
-	-- Jump
+	-- Jump: Space
 	if isDown(Enum.KeyCode.Space) then
 		humanoid.Jump = true
 	end
