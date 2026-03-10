@@ -18,6 +18,7 @@ local VehicleDriving = {}
 --------------------------------------------------------------------------------
 
 local GROUND_Y = GTAConfig.GROUND_Y
+local VEHICLE_SURFACE = GROUND_Y + 2   -- terrain voxel top + clearance (matches client)
 local MAX_SPEED = GTAConfig.VEHICLE_SPEEDS.car          -- 60 studs/sec
 local TURN_RATE = GTAConfig.TURN_RATE                    -- rad/sec (~120°/sec)
 local ACCELERATION = 40       -- studs/sec² to reach max speed
@@ -71,9 +72,9 @@ local function computePlaceY(model)
 
 	if model.PrimaryPart and lowestBottom < math.huge then
 		local ppToBottom = model.PrimaryPart.Position.Y - lowestBottom
-		return GROUND_Y + ppToBottom
+		return VEHICLE_SURFACE + ppToBottom
 	end
-	return GROUND_Y + 3
+	return VEHICLE_SURFACE + 3
 end
 
 -- Spawn a drivable vehicle at a world position
@@ -289,6 +290,18 @@ end
 --------------------------------------------------------------------------------
 -- PUBLIC API
 --------------------------------------------------------------------------------
+
+-- Returns a list of { x, z } for all drivable vehicles (for NPC traffic avoidance)
+function VehicleDriving.getVehiclePositions()
+	local positions = {}
+	for _, entry in pairs(drivables) do
+		if entry.model and entry.model.Parent then
+			local pos = entry.model:GetPivot().Position
+			positions[#positions + 1] = { x = pos.X, z = pos.Z }
+		end
+	end
+	return positions
+end
 
 function VehicleDriving.init(vehFolder)
 	vehicleFolder = vehFolder or Workspace

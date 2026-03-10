@@ -129,6 +129,8 @@ VehicleTraffic.init()
 
 -- 8. Drivable vehicles
 VehicleDriving.init(vehicleFolder)
+-- NPC traffic avoids drivable vehicles
+VehicleTraffic.setObstacleSource(VehicleDriving.getVehiclePositions)
 -- Spawn a Convertible near the player spawn point
 local spawnPos = GTAConfig.SPAWN_POSITION
 VehicleDriving.spawnVehicle("Convertible_Drivable", spawnPos.X + 15, spawnPos.Z + 10, 0)

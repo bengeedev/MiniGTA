@@ -16,6 +16,9 @@ local RoadNetwork = require(script.Parent:WaitForChild("RoadNetwork"))
 
 local VehicleTraffic = {}
 
+-- External obstacle positions (drivable vehicles, etc.) — set via setObstacleSource()
+local getObstaclePositions = nil  -- function() -> { {x,z}, ... }
+
 --------------------------------------------------------------------------------
 -- STATE
 --------------------------------------------------------------------------------
@@ -102,10 +105,23 @@ local function distToVehicleAhead(v)
 		local dist = math.sqrt(dx * dx + dz * dz)
 
 		if dist < PROXIMITY_RANGE and dist > 0.1 then
-			-- Is 'other' in front of us? (dot product with forward vector)
 			local dot = (dx * fwdX + dz * fwdZ) / dist
-			if dot > CONE_DOT then
-				if dist < nearest then
+			if dot > CONE_DOT and dist < nearest then
+				nearest = dist
+			end
+		end
+	end
+
+	-- Also check drivable player vehicles (external obstacles)
+	if getObstaclePositions then
+		for _, obs in ipairs(getObstaclePositions()) do
+			local dx = obs.x - v.x
+			local dz = obs.z - v.z
+			local dist = math.sqrt(dx * dx + dz * dz)
+
+			if dist < PROXIMITY_RANGE and dist > 0.1 then
+				local dot = (dx * fwdX + dz * fwdZ) / dist
+				if dot > CONE_DOT and dist < nearest then
 					nearest = dist
 				end
 			end
@@ -719,6 +735,11 @@ end
 --------------------------------------------------------------------------------
 -- PUBLIC API
 --------------------------------------------------------------------------------
+
+-- Register external obstacle source (e.g., VehicleDriving.getVehiclePositions)
+function VehicleTraffic.setObstacleSource(fn)
+	getObstaclePositions = fn
+end
 
 function VehicleTraffic.init()
 	-- Cache remotes
