@@ -66,6 +66,51 @@ local function dirToYaw(dir)
 end
 
 --------------------------------------------------------------------------------
+-- COLLISION AVOIDANCE (segment-based spatial index)
+--------------------------------------------------------------------------------
+
+local segmentIndex = {}  -- [segKey] = { vehicles sorted by progress }
+
+local function buildSegmentIndex()
+	for k in pairs(segmentIndex) do segmentIndex[k] = nil end
+	for _, v in pairs(vehicles) do
+		if v.isTrain or v.turning then continue end
+		local key = v.fromNode.id .. "_" .. v.toNode.id
+		if not segmentIndex[key] then segmentIndex[key] = {} end
+		table.insert(segmentIndex[key], v)
+	end
+	for _, list in pairs(segmentIndex) do
+		table.sort(list, function(a, b) return a.progress < b.progress end)
+	end
+end
+
+-- Distance (studs) to nearest vehicle ahead on same or next segment
+local function distToVehicleAhead(v)
+	-- Same segment: find first vehicle with higher progress
+	local key = v.fromNode.id .. "_" .. v.toNode.id
+	local list = segmentIndex[key]
+	if list then
+		for _, other in ipairs(list) do
+			if other ~= v and other.progress > v.progress then
+				return (other.progress - v.progress) * v.segLen
+			end
+		end
+	end
+	-- Next segment: check first vehicle near start of outgoing road
+	if v.pendingConn and v.toNode then
+		local nextKey = v.toNode.id .. "_" .. v.pendingConn.node.id
+		local nextList = segmentIndex[nextKey]
+		if nextList and #nextList > 0 then
+			local first = nextList[1]
+			local remaining = (1 - v.progress) * v.segLen
+			local ahead = first.progress * v.pendingConn.length
+			return remaining + ahead
+		end
+	end
+	return math.huge
+end
+
+--------------------------------------------------------------------------------
 -- BEZIER TURN HELPERS
 --------------------------------------------------------------------------------
 
@@ -240,7 +285,8 @@ end
 -- VEHICLE SPAWN / DESPAWN
 --------------------------------------------------------------------------------
 
-local function spawnRoadVehicle()
+-- spread=true: random progress along segment (for initial spawn)
+local function spawnRoadVehicle(spread)
 	if vehicleCount >= TrafficConfig.MAX_ROAD_VEHICLES then return end
 
 	local node = RoadNetwork.getRandomNode()
@@ -250,8 +296,15 @@ local function spawnRoadVehicle()
 	local templates = TrafficConfig.ROAD_TEMPLATES
 	local templateName = templates[math.random(#templates)]
 
-	local x, z = RoadNetwork.getPosition(node, conn.node, 0, conn.dir, conn.laneType)
+	-- Spread vehicles across the road (not all at intersections)
+	local progress = spread and (0.1 + math.random() * 0.8) or 0
+
+	local x, z = RoadNetwork.getPosition(node, conn.node, progress, conn.dir, conn.laneType)
 	local yaw = dirToYaw(conn.dir)
+
+	-- Per-vehicle speed variation so not all cars move identically
+	local baseSpeed = getSpeed(conn.laneType)
+	local speedFactor = 1 + (math.random() * 2 - 1) * TrafficConfig.SPEED_VARIATION
 
 	local id = nextId
 	nextId = nextId + 1
@@ -262,10 +315,11 @@ local function spawnRoadVehicle()
 		x = x, z = z, yaw = yaw,
 		fromNode = node,
 		toNode = conn.node,
-		progress = 0,
+		progress = progress,
 		direction = conn.dir,
 		laneType = conn.laneType,
-		speed = getSpeed(conn.laneType),
+		speed = baseSpeed * speedFactor,
+		speedFactor = speedFactor,
 		segLen = conn.length,
 		-- Pre-compute next turn at destination
 		pendingConn = RoadNetwork.pickRandomConnection(
@@ -320,7 +374,7 @@ local function finishTurn(v)
 	v.toNode = v.nextNode
 	v.direction = v.nextDir
 	v.laneType = v.nextLane
-	v.speed = getSpeed(v.nextLane)
+	v.speed = getSpeed(v.nextLane) * (v.speedFactor or 1)
 	v.segLen = v.nextSegLen
 	v.progress = v.turnExitFrac  -- resume part-way into next segment (curve ended here)
 	v.turning = false
@@ -361,17 +415,31 @@ local function updateRoadVehicles(dt)
 				turnStart = 1 - math.clamp(TURN_RADIUS / v.segLen, 0.05, 0.4)
 			end
 
-			-- Stop at red light before entering intersection/turn zone
+			-- Traffic lights: roads stop at red, highways flow freely
 			local stopped = false
-			if v.progress > 0.75 and v.progress < turnStart then
+			if v.laneType ~= "highway" and v.progress > 0.75 and v.progress < turnStart then
 				if not isGreenFor(v.direction) then
 					stopped = true
 				end
 			end
 
+			-- Collision avoidance: slow down / stop if vehicle ahead is too close
+			local followMult = 1.0
+			if not stopped then
+				local dist = distToVehicleAhead(v)
+				if dist < TrafficConfig.FOLLOW_DIST then
+					if dist <= TrafficConfig.STOP_DIST then
+						followMult = 0
+					else
+						followMult = (dist - TrafficConfig.STOP_DIST)
+							/ (TrafficConfig.FOLLOW_DIST - TrafficConfig.STOP_DIST)
+					end
+				end
+			end
+
 			if not stopped then
 				if v.segLen > 0 then
-					v.progress = v.progress + (v.speed * dt) / v.segLen
+					v.progress = v.progress + (v.speed * followMult * dt) / v.segLen
 				end
 			end
 
@@ -389,7 +457,7 @@ local function updateRoadVehicles(dt)
 					v.toNode = nextConn.node
 					v.direction = nextConn.dir
 					v.laneType = nextConn.laneType
-					v.speed = getSpeed(nextConn.laneType)
+					v.speed = getSpeed(nextConn.laneType) * (v.speedFactor or 1)
 					v.segLen = nextConn.length
 					v.progress = 0
 					-- Pre-compute next connection
@@ -563,9 +631,9 @@ function VehicleTraffic.init()
 	-- Spawn train
 	spawnTrain()
 
-	-- Spawn initial road vehicles
-	for _ = 1, math.min(10, TrafficConfig.MAX_ROAD_VEHICLES) do
-		spawnRoadVehicle()
+	-- Spawn ALL road vehicles immediately with spread positions (no gradual pop-in)
+	for _ = 1, TrafficConfig.MAX_ROAD_VEHICLES do
+		spawnRoadVehicle(true)
 	end
 
 	print(string.format("[VehicleTraffic] Started: %d road vehicles, train %s",
@@ -573,16 +641,21 @@ function VehicleTraffic.init()
 
 	-- Heartbeat loop
 	RunService.Heartbeat:Connect(function(dt)
+		-- Build spatial index for collision avoidance
+		buildSegmentIndex()
+
 		-- Simulate
 		updateRoadVehicles(dt)
 		updateTrain(dt)
 		updateTrafficLights(dt)
 
-		-- Spawn timer
+		-- Replenish despawned vehicles slowly (spread across road)
 		spawnTimer = spawnTimer + dt
-		if spawnTimer >= TrafficConfig.SPAWN_INTERVAL then
+		if spawnTimer >= TrafficConfig.REPLENISH_INTERVAL then
 			spawnTimer = 0
-			spawnRoadVehicle()
+			if vehicleCount < TrafficConfig.MAX_ROAD_VEHICLES then
+				spawnRoadVehicle(true)
+			end
 		end
 
 		-- Broadcast positions at SYNC_RATE Hz

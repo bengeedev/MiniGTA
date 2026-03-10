@@ -137,10 +137,11 @@ local function createVehicle(id, templateName, x, z, yaw)
 	local model = template:Clone()
 	setModelCFrame(model, cf)
 
-	-- Anchor all parts (client-rendered, no physics)
+	-- Anchor all parts + start hidden (render loop decides visibility via distance culling)
 	for _, part in ipairs(model:GetDescendants()) do
 		if part:IsA("BasePart") then
 			part.Anchored = true
+			part.Transparency = 1
 		end
 	end
 
@@ -151,7 +152,7 @@ local function createVehicle(id, templateName, x, z, yaw)
 		templateName = templateName,
 		targetCF = cf,
 		currentCF = cf,
-		visible = true,
+		visible = false,  -- render loop will show if within cull distance
 	}
 end
 
