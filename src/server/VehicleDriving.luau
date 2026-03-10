@@ -97,33 +97,34 @@ function VehicleDriving.spawnVehicle(templateName, worldX, worldZ, yaw)
 	local placeY = computePlaceY(model)
 	yaw = yaw or 0
 
-	-- Weld all parts to PrimaryPart so PivotTo moves everything atomically (no flicker)
-	local root = model.PrimaryPart
-	if not root then
-		-- Find a suitable root part
+	-- Position model BEFORE welding (so weld offsets are captured at correct positions)
+	model:PivotTo(CFrame.new(worldX, placeY, worldZ) * CFrame.Angles(0, yaw, 0))
+
+	-- Find chassis (same as DashOrCrash: PrimaryPart or explicit "Chassis" part)
+	local chassis = model.PrimaryPart or model:FindFirstChild("Chassis")
+	if not chassis then
 		for _, p in ipairs(model:GetDescendants()) do
 			if p:IsA("BasePart") then
-				model.PrimaryPart = p
-				root = p
+				chassis = p
 				break
 			end
 		end
 	end
+	model.PrimaryPart = chassis
 
-	if root then
+	-- Weld all parts to chassis so CFrame moves everything atomically (no flicker)
+	if chassis then
 		for _, part in ipairs(model:GetDescendants()) do
-			if part:IsA("BasePart") and part ~= root then
+			if part:IsA("BasePart") and part ~= chassis then
 				part.Anchored = false
 				local weld = Instance.new("WeldConstraint")
-				weld.Part0 = root
+				weld.Part0 = chassis
 				weld.Part1 = part
 				weld.Parent = part
 			end
 		end
-		root.Anchored = true
+		chassis.Anchored = true
 	end
-
-	model:PivotTo(CFrame.new(worldX, placeY, worldZ) * CFrame.Angles(0, yaw, 0))
 
 	-- Add ProximityPrompt to the chassis / PrimaryPart
 	local promptParent = root or model:FindFirstChildWhichIsA("BasePart")
@@ -254,17 +255,21 @@ local function updateVehicles(dt)
 	for _, entry in pairs(drivables) do
 		if not entry.driver then continue end
 
-		local root = entry.model and entry.model.PrimaryPart
-		if not root then continue end
+		local chassis = entry.model and entry.model.PrimaryPart
+		if not chassis then continue end
 
-		local input = playerInput[entry.driver]
-		if not input then continue end
+		-- Read input directly from VehicleSeat (no network latency)
+		local seat = entry.model:FindFirstChild("DrivingSeat")
+		if not seat then continue end
+
+		local rawThrottle = seat.Throttle  -- -1 (S), 0, 1 (W)
+		local rawSteer = seat.Steer        -- -1 (A), 0, 1 (D)
 
 		-- Smooth input via LERP (prevents jitter from discrete key presses)
 		local lerpAlpha = math.min(1, ACCEL_LERP * dt)
 		local steerAlpha = math.min(1, STEER_LERP * dt)
-		entry.smoothThrottle = entry.smoothThrottle + (input.throttle - entry.smoothThrottle) * lerpAlpha
-		entry.smoothSteer = entry.smoothSteer + (input.steer - entry.smoothSteer) * steerAlpha
+		entry.smoothThrottle = entry.smoothThrottle + (rawThrottle - entry.smoothThrottle) * lerpAlpha
+		entry.smoothSteer = entry.smoothSteer + (rawSteer - entry.smoothSteer) * steerAlpha
 
 		local throttle = entry.smoothThrottle
 		local steer = entry.smoothSteer
@@ -300,12 +305,12 @@ local function updateVehicles(dt)
 		-- Move — direct CFrame on chassis (NOT PivotTo, which causes micro-shake)
 		local fwdX = math.sin(entry.yaw)
 		local fwdZ = math.cos(entry.yaw)
-		local pos = root.Position
+		local pos = chassis.Position
 
 		local newX = pos.X + fwdX * entry.speed * dt
 		local newZ = pos.Z + fwdZ * entry.speed * dt
 
-		root.CFrame = CFrame.new(newX, entry.placeY, newZ) * CFrame.Angles(0, entry.yaw, 0)
+		chassis.CFrame = CFrame.new(newX, entry.placeY, newZ) * CFrame.Angles(0, entry.yaw, 0)
 	end
 end
 
