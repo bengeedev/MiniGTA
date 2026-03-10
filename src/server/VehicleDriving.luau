@@ -95,10 +95,36 @@ function VehicleDriving.spawnVehicle(templateName, worldX, worldZ, yaw)
 	local placeY = computePlaceY(model)
 	yaw = yaw or 0
 
+	-- Weld all parts to PrimaryPart so PivotTo moves everything atomically (no flicker)
+	local root = model.PrimaryPart
+	if not root then
+		-- Find a suitable root part
+		for _, p in ipairs(model:GetDescendants()) do
+			if p:IsA("BasePart") then
+				model.PrimaryPart = p
+				root = p
+				break
+			end
+		end
+	end
+
+	if root then
+		for _, part in ipairs(model:GetDescendants()) do
+			if part:IsA("BasePart") and part ~= root then
+				part.Anchored = false
+				local weld = Instance.new("WeldConstraint")
+				weld.Part0 = root
+				weld.Part1 = part
+				weld.Parent = part
+			end
+		end
+		root.Anchored = true
+	end
+
 	model:PivotTo(CFrame.new(worldX, placeY, worldZ) * CFrame.Angles(0, yaw, 0))
 
 	-- Add ProximityPrompt to the chassis / PrimaryPart
-	local promptParent = model.PrimaryPart or model:FindFirstChildWhichIsA("BasePart")
+	local promptParent = root or model:FindFirstChildWhichIsA("BasePart")
 	if promptParent then
 		local prompt = Instance.new("ProximityPrompt")
 		prompt.ObjectText = model.Name:gsub("_Drivable", ""):gsub("_", " ")
