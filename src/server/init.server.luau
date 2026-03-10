@@ -26,6 +26,7 @@ local NPCManager = require(script:WaitForChild("NPCManager"))
 local CharacterManager = require(script:WaitForChild("CharacterManager"))
 local DataStoreManager = require(script:WaitForChild("DataStoreManager"))
 local CityBuilder = require(script:WaitForChild("CityBuilder"))
+local VehicleTraffic = require(script:WaitForChild("VehicleTraffic"))
 
 --------------------------------------------------------------------------------
 -- SETUP
@@ -118,9 +119,14 @@ NPCManager.init(npcFolder)
 print("[Server] Building city...")
 reportProgress("Building city...", 0.55)
 CityBuilder.build(decorFolder, vehicleFolder, npcFolder)
-reportProgress("City built!", 0.90)
+reportProgress("City built!", 0.85)
 
--- 7. Set default environment
+-- 7. Start vehicle traffic (road vehicles + train)
+print("[Server] Starting vehicle traffic...")
+reportProgress("Starting traffic...", 0.90)
+VehicleTraffic.init()
+
+-- 8. Set default environment
 reportProgress("Finalizing...", 0.95)
 
 local loadTime = tick() - loadingStartTime
@@ -158,6 +164,9 @@ local function onPlayerAdded(player)
 	if envRemote then
 		envRemote:FireClient(player, { envName = "default", transition = false })
 	end
+
+	-- Send traffic state snapshot (vehicles + light phase)
+	VehicleTraffic.sendFullState(player)
 
 	-- Handle character spawns
 	player.CharacterAdded:Connect(function(character)

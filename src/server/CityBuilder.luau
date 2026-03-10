@@ -12,6 +12,7 @@ local DecorUtils = require(script.Parent:WaitForChild("DecorCreation"):WaitForCh
 local HighSpeedTrack = require(script.Parent:WaitForChild("DecorCreation"):WaitForChild("decor"):WaitForChild("HighSpeedTrack"))
 local RailwayCrossing = require(script.Parent:WaitForChild("DecorCreation"):WaitForChild("decor"):WaitForChild("RailwayCrossing"))
 local WaterBridge = require(script.Parent:WaitForChild("DecorCreation"):WaitForChild("decor"):WaitForChild("WaterBridge"))
+local RoadNetwork = require(script.Parent:WaitForChild("RoadNetwork"))
 
 local CityBuilder = {}
 local Terrain = Workspace.Terrain
@@ -392,6 +393,205 @@ local function buildWaterChannel()
 end
 
 --------------------------------------------------------------------------------
+-- 5. ROAD MARKINGS (center lines + dashes on road surfaces)
+--------------------------------------------------------------------------------
+
+local DRIVEABLE_LANES = { road = true, highway = true }
+
+local function buildRoadMarkings()
+	local MARK_Y   = GROUND_Y + 1
+	local C_YELLOW  = Color3.fromRGB(255, 200, 40)
+	local C_WHITE   = Color3.fromRGB(240, 240, 240)
+	local LINE_W    = 1
+	local DASH_LEN  = 4
+	local DASH_GAP  = 6
+	local markCount = 0
+
+	local compoundRects = GTAConfig.getCompoundRects()
+
+	-- Non-driveable H-lane Z zones to skip for V-lane markings (railway, water)
+	local nonDriveableZones = {}
+	for _, h in ipairs(GTAConfig.H_LANES) do
+		if not DRIVEABLE_LANES[h.type] then
+			local z = GTAConfig.getRowEdgeZ(h.row)
+			local w = getLaneWidth(h.type)
+			table.insert(nonDriveableZones, { z - w / 2, z + w / 2 })
+		end
+	end
+
+	--------------------------------------------------------------------
+	-- A. H-LANE CENTER LINES (yellow, along X)
+	--------------------------------------------------------------------
+	for _, h in ipairs(GTAConfig.H_LANES) do
+		if not DRIVEABLE_LANES[h.type] then continue end
+		local z = GTAConfig.getRowEdgeZ(h.row)
+		local cityLeft  = GTAConfig.CITY_ORIGIN_X
+		local cityRight = GTAConfig.CITY_ORIGIN_X + CITY_W
+
+		-- Skip compound zones
+		local skipRanges = {}
+		for _, r in ipairs(compoundRects) do
+			if z > r.z1 and z < r.z2 then
+				table.insert(skipRanges, { r.x1, r.x2 })
+			end
+		end
+		table.sort(skipRanges, function(a, b) return a[1] < b[1] end)
+
+		local curX = cityLeft
+		for _, skip in ipairs(skipRanges) do
+			if curX < skip[1] then
+				local segLen = skip[1] - curX
+				local cx = (curX + skip[1]) / 2
+				local line = Instance.new("Part")
+				line.Name = "CenterLine"
+				line.Size = Vector3.new(segLen, 0.15, LINE_W)
+				line.Position = Vector3.new(cx, MARK_Y, z)
+				line.Anchored = true
+				line.CanCollide = false
+				line.Material = Enum.Material.Neon
+				line.Color = C_YELLOW
+				line.Parent = DecorUtils.decorFolder
+				markCount += 1
+			end
+			curX = math.max(curX, skip[2])
+		end
+		if curX < cityRight then
+			local segLen = cityRight - curX
+			local cx = (curX + cityRight) / 2
+			local line = Instance.new("Part")
+			line.Name = "CenterLine"
+			line.Size = Vector3.new(segLen, 0.15, LINE_W)
+			line.Position = Vector3.new(cx, MARK_Y, z)
+			line.Anchored = true
+			line.CanCollide = false
+			line.Material = Enum.Material.Neon
+			line.Color = C_YELLOW
+			line.Parent = DecorUtils.decorFolder
+			markCount += 1
+		end
+	end
+
+	--------------------------------------------------------------------
+	-- B. V-LANE CENTER LINES (yellow, along Z)
+	--------------------------------------------------------------------
+	for _, v in ipairs(GTAConfig.V_LANES) do
+		if not DRIVEABLE_LANES[v.type] then continue end
+		local x = GTAConfig.getColEdgeX(v.col)
+		local cityTop    = GTAConfig.CITY_ORIGIN_Z
+		local cityBottom = GTAConfig.CITY_ORIGIN_Z + CITY_D
+
+		-- Skip compound zones + non-driveable H-lane zones (railway, water)
+		local skipRanges = {}
+		for _, r in ipairs(compoundRects) do
+			if x > r.x1 and x < r.x2 then
+				table.insert(skipRanges, { r.z1, r.z2 })
+			end
+		end
+		for _, zone in ipairs(nonDriveableZones) do
+			table.insert(skipRanges, zone)
+		end
+		table.sort(skipRanges, function(a, b) return a[1] < b[1] end)
+
+		local curZ = cityTop
+		for _, skip in ipairs(skipRanges) do
+			if curZ < skip[1] then
+				local segLen = skip[1] - curZ
+				local cz = (curZ + skip[1]) / 2
+				local line = Instance.new("Part")
+				line.Name = "CenterLine"
+				line.Size = Vector3.new(LINE_W, 0.15, segLen)
+				line.Position = Vector3.new(x, MARK_Y, cz)
+				line.Anchored = true
+				line.CanCollide = false
+				line.Material = Enum.Material.Neon
+				line.Color = C_YELLOW
+				line.Parent = DecorUtils.decorFolder
+				markCount += 1
+			end
+			curZ = math.max(curZ, skip[2])
+		end
+		if curZ < cityBottom then
+			local segLen = cityBottom - curZ
+			local cz = (curZ + cityBottom) / 2
+			local line = Instance.new("Part")
+			line.Name = "CenterLine"
+			line.Size = Vector3.new(LINE_W, 0.15, segLen)
+			line.Position = Vector3.new(x, MARK_Y, cz)
+			line.Anchored = true
+			line.CanCollide = false
+			line.Material = Enum.Material.Neon
+			line.Color = C_YELLOW
+			line.Parent = DecorUtils.decorFolder
+			markCount += 1
+		end
+	end
+
+	--------------------------------------------------------------------
+	-- C. HIGHWAY LANE DASHES (white, between lanes on same side)
+	--------------------------------------------------------------------
+	for _, h in ipairs(GTAConfig.H_LANES) do
+		if h.type ~= "highway" then continue end
+		local z = GTAConfig.getRowEdgeZ(h.row)
+		local w = getLaneWidth(h.type)
+		local quarterW = w / 4  -- offset for lane dividers
+		local cityLeft  = GTAConfig.CITY_ORIGIN_X
+		local cityRight = GTAConfig.CITY_ORIGIN_X + CITY_W
+
+		for _, sideZ in ipairs({-1, 1}) do
+			local dashZ = z + sideZ * quarterW
+			for dx = cityLeft, cityRight, DASH_LEN + DASH_GAP do
+				local dash = Instance.new("Part")
+				dash.Name = "LaneDash"
+				dash.Size = Vector3.new(DASH_LEN, 0.15, 0.4)
+				dash.Position = Vector3.new(dx + DASH_LEN / 2, MARK_Y, dashZ)
+				dash.Anchored = true
+				dash.CanCollide = false
+				dash.Material = Enum.Material.Neon
+				dash.Color = C_WHITE
+				dash.Parent = DecorUtils.decorFolder
+			end
+			markCount += 1
+		end
+	end
+
+	for _, v in ipairs(GTAConfig.V_LANES) do
+		if v.type ~= "highway" then continue end
+		local x = GTAConfig.getColEdgeX(v.col)
+		local w = getLaneWidth(v.type)
+		local quarterW = w / 4
+		local cityTop    = GTAConfig.CITY_ORIGIN_Z
+		local cityBottom = GTAConfig.CITY_ORIGIN_Z + CITY_D
+
+		for _, sideX in ipairs({-1, 1}) do
+			local dashX = x + sideX * quarterW
+			for dz = cityTop, cityBottom, DASH_LEN + DASH_GAP do
+				local dash = Instance.new("Part")
+				dash.Name = "LaneDash"
+				dash.Size = Vector3.new(0.4, 0.15, DASH_LEN)
+				dash.Position = Vector3.new(dashX, MARK_Y, dz + DASH_LEN / 2)
+				dash.Anchored = true
+				dash.CanCollide = false
+				dash.Material = Enum.Material.Neon
+				dash.Color = C_WHITE
+				dash.Parent = DecorUtils.decorFolder
+			end
+			markCount += 1
+		end
+	end
+
+	-- Debug: print first few marking positions
+	local debugCount = 0
+	for _, child in ipairs(DecorUtils.decorFolder:GetChildren()) do
+		if child.Name == "CenterLine" and debugCount < 3 then
+			print("[RoadMarkings] Line at", child.Position, "size", child.Size)
+			debugCount += 1
+		end
+	end
+
+	print("[CityBuilder] Road markings:", markCount)
+end
+
+--------------------------------------------------------------------------------
 -- PUBLIC API
 --------------------------------------------------------------------------------
 
@@ -409,6 +609,7 @@ function CityBuilder.build(decorFolderRef, vehicleFolderRef, npcFolderRef)
 	buildSurface()
 	buildRailwayTracks()
 	buildWaterChannel()
+	RoadNetwork.build()
 
 	print("[CityBuilder] === City complete! ===")
 end

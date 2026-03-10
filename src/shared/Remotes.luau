@@ -41,6 +41,12 @@ Remotes.EVENTS = {
 	-- Sprint
 	"SprintToggle",        -- Client -> Server: sprint state changed
 
+	-- NPC Traffic (server → client, data-only sync)
+	"TrafficSpawn",        -- Server -> Client: new NPC vehicle { id, templateName, x, z, yaw }
+	"TrafficDespawn",      -- Server -> Client: vehicle removed { id }
+	"TrafficLightSync",    -- Server -> Client: traffic light phase changed { phase }
+	"TrafficFullState",    -- Server -> Client: full snapshot for late-joiners
+
 	-- Debug (Studio-only)
 	"DebugTeleport",       -- Client -> Server: teleport to district
 	"DebugSpawnVehicle",   -- Client -> Server: spawn vehicle template near player
@@ -51,6 +57,11 @@ Remotes.EVENTS = {
 	"DebugToggleNoclip",   -- Client -> Server: toggle noclip fly mode
 	"DebugResetPlayer",    -- Client -> Server: teleport to spawn
 	"DebugGiveCoins",      -- Client -> Server: add coins for testing
+}
+
+-- Unreliable remote events (position sync — dropped packets OK)
+Remotes.UNRELIABLE_EVENTS = {
+	"TrafficSync",         -- Server -> Client: batch position updates (8 Hz)
 }
 
 -- Get or create the Remotes folder
@@ -84,7 +95,16 @@ function Remotes.createAll()
 		end
 	end
 
-	print("[Remotes] Created " .. #Remotes.EVENTS .. " RemoteEvents, " .. #Remotes.FUNCTIONS .. " RemoteFunctions")
+	for _, eventName in ipairs(Remotes.UNRELIABLE_EVENTS) do
+		if not folder:FindFirstChild(eventName) then
+			local remote = Instance.new("UnreliableRemoteEvent")
+			remote.Name = eventName
+			remote.Parent = folder
+		end
+	end
+
+	local totalEvents = #Remotes.EVENTS + #Remotes.UNRELIABLE_EVENTS
+	print("[Remotes] Created " .. totalEvents .. " RemoteEvents (" .. #Remotes.UNRELIABLE_EVENTS .. " unreliable), " .. #Remotes.FUNCTIONS .. " RemoteFunctions")
 	return folder
 end
 
