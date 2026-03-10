@@ -30,6 +30,7 @@ Remotes.EVENTS = {
 	"VehicleExited",       -- Server -> Client: player exited vehicle
 	"ExitVehicle",         -- Client -> Server: player wants to exit
 	"VehicleTypeChanged",  -- Server -> Client: vehicle domain changed (ground/water/air/sub)
+	"DriveInput",          -- Client -> Server: driving input { throttle, steer } (unreliable-like, sent often)
 
 	-- Interaction
 	"InteractPrompt",      -- Client -> Server: player pressed E on something

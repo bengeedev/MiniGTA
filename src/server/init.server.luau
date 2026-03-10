@@ -27,6 +27,7 @@ local CharacterManager = require(script:WaitForChild("CharacterManager"))
 local DataStoreManager = require(script:WaitForChild("DataStoreManager"))
 local CityBuilder = require(script:WaitForChild("CityBuilder"))
 local VehicleTraffic = require(script:WaitForChild("VehicleTraffic"))
+local VehicleDriving = require(script:WaitForChild("VehicleDriving"))
 
 --------------------------------------------------------------------------------
 -- SETUP
@@ -126,7 +127,13 @@ print("[Server] Starting vehicle traffic...")
 reportProgress("Starting traffic...", 0.90)
 VehicleTraffic.init()
 
--- 8. Set default environment
+-- 8. Drivable vehicles
+VehicleDriving.init(vehicleFolder)
+-- Spawn a Convertible near the player spawn point
+local spawnPos = GTAConfig.SPAWN_POSITION
+VehicleDriving.spawnVehicle("Convertible_Drivable", spawnPos.X + 15, spawnPos.Z + 10, 0)
+
+-- 9. Set default environment
 reportProgress("Finalizing...", 0.95)
 
 local loadTime = tick() - loadingStartTime
