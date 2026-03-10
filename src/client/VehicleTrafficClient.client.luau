@@ -219,7 +219,70 @@ local function onTrafficLightSync(_phase)
 end
 
 --------------------------------------------------------------------------------
--- RENDER LOOP (interpolation + distance culling)
+-- PLAYER-VS-TRAFFIC COLLISION (bounding box check)
+--------------------------------------------------------------------------------
+
+local HIT_COOLDOWN = 2.0        -- seconds between hits (prevents spam)
+local PLAYER_RADIUS = 2.0       -- player hitbox radius (studs)
+local HIT_CHECK_RANGE_SQ = 900  -- only check vehicles within 30 studs (30² = 900)
+local lastHitTime = 0
+local trafficHitRemote = nil
+
+-- Check if player position is inside a vehicle's bounding box (+ player radius margin)
+local function isInsideVehicleBBox(playerPos, model)
+	if not model.PrimaryPart then return false end
+
+	local cf, size = model:GetBoundingBox()
+	local halfX = size.X / 2 + PLAYER_RADIUS
+	local halfY = size.Y / 2 + PLAYER_RADIUS
+	local halfZ = size.Z / 2 + PLAYER_RADIUS
+
+	-- Transform player position to vehicle's local space
+	local localPos = cf:PointToObjectSpace(playerPos)
+
+	return math.abs(localPos.X) < halfX
+		and math.abs(localPos.Y) < halfY
+		and math.abs(localPos.Z) < halfZ
+end
+
+local function checkPlayerCollision()
+	-- Cooldown check
+	local now = tick()
+	if now - lastHitTime < HIT_COOLDOWN then return end
+
+	-- Get player position
+	local character = LocalPlayer.Character
+	if not character then return end
+	local hrp = character:FindFirstChild("HumanoidRootPart")
+	if not hrp then return end
+	local humanoid = character:FindFirstChildOfClass("Humanoid")
+	if not humanoid or humanoid.Health <= 0 then return end
+
+	local playerPos = hrp.Position
+
+	for id, entry in pairs(activeVehicles) do
+		if not entry.visible or not entry.model or not entry.model.Parent then continue end
+
+		-- Quick distance check before expensive bounding box
+		local vehPos = entry.currentCF.Position
+		local dx = vehPos.X - playerPos.X
+		local dz = vehPos.Z - playerPos.Z
+		local dist2 = dx * dx + dz * dz
+
+		if dist2 < HIT_CHECK_RANGE_SQ then
+			if isInsideVehicleBBox(playerPos, entry.model) then
+				lastHitTime = now
+				if trafficHitRemote then
+					trafficHitRemote:FireServer(id)
+				end
+				return  -- one hit per frame
+			end
+		end
+	end
+end
+
+--------------------------------------------------------------------------------
+-- RENDER LOOP (interpolation + distance culling + collision)
 --------------------------------------------------------------------------------
 
 local function updateRendering(dt)
@@ -266,6 +329,9 @@ local function updateRendering(dt)
 			setModelCFrame(entry.model, entry.currentCF)
 		end
 	end
+
+	-- Check player-vs-traffic collision
+	checkPlayerCollision()
 end
 
 --------------------------------------------------------------------------------
@@ -290,6 +356,8 @@ if fullR then fullR.OnClientEvent:Connect(onTrafficFullState) end
 
 local lightR = Remotes.waitFor("TrafficLightSync")
 if lightR then lightR.OnClientEvent:Connect(onTrafficLightSync) end
+
+trafficHitRemote = Remotes.waitFor("TrafficHit")
 
 -- Render loop
 RunService.RenderStepped:Connect(updateRendering)

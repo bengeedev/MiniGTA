@@ -362,6 +362,26 @@ if debugGiveCoins then
 end
 
 --------------------------------------------------------------------------------
+-- TRAFFIC HIT (player hit by NPC vehicle → kill)
+--------------------------------------------------------------------------------
+
+local trafficHitRemote = Remotes.get("TrafficHit")
+if trafficHitRemote then
+	trafficHitRemote.OnServerEvent:Connect(function(player, _vehicleId)
+		if not playerState[player] then return end
+		if playerState[player].godMode then return end
+
+		local character = player.Character
+		if not character then return end
+		local humanoid = character:FindFirstChildOfClass("Humanoid")
+		if not humanoid or humanoid.Health <= 0 then return end
+
+		humanoid:TakeDamage(humanoid.Health)
+		print("[Traffic] Player", player.Name, "hit by NPC vehicle")
+	end)
+end
+
+--------------------------------------------------------------------------------
 -- SAVE ON CLOSE
 --------------------------------------------------------------------------------
 

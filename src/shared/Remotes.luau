@@ -46,6 +46,7 @@ Remotes.EVENTS = {
 	"TrafficDespawn",      -- Server -> Client: vehicle removed { id }
 	"TrafficLightSync",    -- Server -> Client: traffic light phase changed { phase }
 	"TrafficFullState",    -- Server -> Client: full snapshot for late-joiners
+	"TrafficHit",          -- Client -> Server: player hit by NPC traffic vehicle { vehicleId }
 
 	-- Debug (Studio-only)
 	"DebugTeleport",       -- Client -> Server: teleport to district
