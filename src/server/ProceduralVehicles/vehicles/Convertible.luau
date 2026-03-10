@@ -391,13 +391,13 @@ function Convertible.build()
 	local engineBayY = rearDeckY + 0.2 + engineBayH / 2  -- sits on deck
 	local engineBayZ = (cockpitRearZ + rearZ) / 2
 
-	-- Rear deck surface (full width to cover rear wheel tops)
+	-- Rear deck surface (narrower than body so it doesn't Z-fight with side panels)
 	-- Dark engine bay floor — neon engine blocks will sit on top later
 	-- Shortened by 0.5 so it doesn't overlap with the RearEnd panel
 	local deckLen = rearDeckLength - 0.8
 	local deckZ = cockpitRearZ - deckLen / 2
 	VU.part(model, "RearDeck",
-		Vector3.new(CHASSIS_WIDTH + 0.3, 0.4, deckLen),
+		Vector3.new(CHASSIS_WIDTH - 0.4, 0.4, deckLen),
 		CFrame.new(0, rearDeckY, deckZ),
 		C_CHASSIS, Enum.Material.Metal)
 
@@ -457,7 +457,7 @@ function Convertible.build()
 	local rearWallTop = rearDeckY + 0.2 + engineBayH  -- up to engine bay top
 	local rearWallH = rearWallTop - rearWallBottom
 	VU.part(model, "RearEnd",
-		Vector3.new(CHASSIS_WIDTH + 0.3, rearWallH, 0.4),
+		Vector3.new(CHASSIS_WIDTH - 0.4, rearWallH, 0.4),
 		CFrame.new(0, rearWallBottom + rearWallH/2, rearZ + 0.2),
 		C_BODY, Enum.Material.SmoothPlastic)
 
