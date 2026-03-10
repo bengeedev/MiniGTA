@@ -69,45 +69,50 @@ end
 -- COLLISION AVOIDANCE (segment-based spatial index)
 --------------------------------------------------------------------------------
 
-local segmentIndex = {}  -- [segKey] = { vehicles sorted by progress }
+local intersectionOccupied = {}  -- [nodeId] = true when a vehicle is turning there
 
-local function buildSegmentIndex()
-	for k in pairs(segmentIndex) do segmentIndex[k] = nil end
+local function buildIntersectionIndex()
+	for k in pairs(intersectionOccupied) do intersectionOccupied[k] = nil end
+
 	for _, v in pairs(vehicles) do
-		if v.isTrain or v.turning then continue end
-		local key = v.fromNode.id .. "_" .. v.toNode.id
-		if not segmentIndex[key] then segmentIndex[key] = {} end
-		table.insert(segmentIndex[key], v)
-	end
-	for _, list in pairs(segmentIndex) do
-		table.sort(list, function(a, b) return a.progress < b.progress end)
+		if v.isTrain then continue end
+		if v.turning and v.turnFromNode then
+			intersectionOccupied[v.turnFromNode.id] = true
+		end
 	end
 end
 
--- Distance (studs) to nearest vehicle ahead on same or next segment
+-- World-space forward proximity: scan ALL vehicles, find nearest one ahead.
+-- "Ahead" = within a forward cone based on vehicle's yaw direction.
+local PROXIMITY_RANGE = 40  -- max scan range (studs)
+local CONE_DOT = 0.7        -- cos(~45°) — how wide the "ahead" cone is
+
 local function distToVehicleAhead(v)
-	-- Same segment: find first vehicle with higher progress
-	local key = v.fromNode.id .. "_" .. v.toNode.id
-	local list = segmentIndex[key]
-	if list then
-		for _, other in ipairs(list) do
-			if other ~= v and other.progress > v.progress then
-				return (other.progress - v.progress) * v.segLen
+	-- Vehicle's forward direction from yaw (sin=X, cos=Z in Roblox convention)
+	local fwdX = math.sin(v.yaw)
+	local fwdZ = math.cos(v.yaw)
+
+	local nearest = math.huge
+
+	for _, other in pairs(vehicles) do
+		if other == v or other.isTrain then continue end
+
+		local dx = other.x - v.x
+		local dz = other.z - v.z
+		local dist = math.sqrt(dx * dx + dz * dz)
+
+		if dist < PROXIMITY_RANGE and dist > 0.1 then
+			-- Is 'other' in front of us? (dot product with forward vector)
+			local dot = (dx * fwdX + dz * fwdZ) / dist
+			if dot > CONE_DOT then
+				if dist < nearest then
+					nearest = dist
+				end
 			end
 		end
 	end
-	-- Next segment: check first vehicle near start of outgoing road
-	if v.pendingConn and v.toNode then
-		local nextKey = v.toNode.id .. "_" .. v.pendingConn.node.id
-		local nextList = segmentIndex[nextKey]
-		if nextList and #nextList > 0 then
-			local first = nextList[1]
-			local remaining = (1 - v.progress) * v.segLen
-			local ahead = first.progress * v.pendingConn.length
-			return remaining + ahead
-		end
-	end
-	return math.huge
+
+	return nearest
 end
 
 --------------------------------------------------------------------------------
@@ -268,12 +273,62 @@ local function isGreenFor(direction)
 	end
 end
 
+-- Cached physical traffic light models (found after city is built)
+local trafficLightModels = nil  -- { { model, dir="H"|"V" }, ... }
+
+local function findTrafficLightModels()
+	trafficLightModels = {}
+	local decorFolder = Workspace:FindFirstChild("World") and Workspace.World:FindFirstChild("Decor")
+	if not decorFolder then return end
+
+	for _, child in ipairs(decorFolder:GetChildren()) do
+		if child:IsA("Model") and child.Name:find("TrafficLight") then
+			local dir = child:GetAttribute("TrafficDir")
+			if dir then
+				table.insert(trafficLightModels, { model = child, dir = dir })
+			end
+		end
+	end
+
+	print(string.format("[VehicleTraffic] Found %d physical traffic lights", #trafficLightModels))
+end
+
+-- Toggle physical light colors based on current phase
+local function updatePhysicalLights()
+	if not trafficLightModels then return end
+
+	for _, entry in ipairs(trafficLightModels) do
+		local isGreen = (entry.dir == "H" and lightPhase == TrafficConfig.PHASE_H_GREEN)
+			or (entry.dir == "V" and lightPhase == TrafficConfig.PHASE_V_GREEN)
+		local isYellow = (entry.dir == "H" and lightPhase == TrafficConfig.PHASE_H_YELLOW)
+			or (entry.dir == "V" and lightPhase == TrafficConfig.PHASE_V_YELLOW)
+		local isRed = not isGreen and not isYellow
+
+		for _, part in ipairs(entry.model:GetDescendants()) do
+			if part.Name == "GreenLight" then
+				part.Material = isGreen and Enum.Material.Neon or Enum.Material.SmoothPlastic
+				part.Color = isGreen and part:GetAttribute("OnColor") or part:GetAttribute("OffColor")
+			elseif part.Name == "YellowLight" then
+				part.Material = isYellow and Enum.Material.Neon or Enum.Material.SmoothPlastic
+				part.Color = isYellow and part:GetAttribute("OnColor") or part:GetAttribute("OffColor")
+			elseif part.Name == "RedLight" then
+				part.Material = isRed and Enum.Material.Neon or Enum.Material.SmoothPlastic
+				part.Color = isRed and part:GetAttribute("OnColor") or part:GetAttribute("OffColor")
+			end
+		end
+	end
+end
+
 local function updateTrafficLights(dt)
 	lightTimer = lightTimer + dt
 	local duration = PHASE_DURATIONS[lightPhase]
 	if lightTimer >= duration then
 		lightTimer = lightTimer - duration
 		lightPhase = (lightPhase % 6) + 1
+
+		-- Update physical traffic light models
+		updatePhysicalLights()
+
 		-- Broadcast phase change to all clients
 		if lightRemote then
 			lightRemote:FireAllClients(lightPhase)
@@ -285,19 +340,44 @@ end
 -- VEHICLE SPAWN / DESPAWN
 --------------------------------------------------------------------------------
 
+-- Check if a segment+progress spot is too close to an existing vehicle
+local MIN_SPAWN_GAP = 25  -- studs between spawned vehicles on same segment
+local function isSpawnClear(node, toNode, progress, segLen)
+	local key = node.id .. "_" .. toNode.id
+	for _, v in pairs(vehicles) do
+		if v.isTrain then continue end
+		if v.fromNode.id == node.id and v.toNode.id == toNode.id then
+			local dist = math.abs(v.progress - progress) * segLen
+			if dist < MIN_SPAWN_GAP then
+				return false
+			end
+		end
+	end
+	return true
+end
+
 -- spread=true: random progress along segment (for initial spawn)
 local function spawnRoadVehicle(spread)
 	if vehicleCount >= TrafficConfig.MAX_ROAD_VEHICLES then return end
 
-	local node = RoadNetwork.getRandomNode()
-	if not node or #node.connections == 0 then return end
+	-- Try a few times to find a clear spot (avoid overlapping spawns)
+	local node, conn, progress
+	for _attempt = 1, 5 do
+		node = RoadNetwork.getRandomNode()
+		if not node or #node.connections == 0 then continue end
 
-	local conn = node.connections[math.random(#node.connections)]
+		conn = node.connections[math.random(#node.connections)]
+		progress = spread and (0.1 + math.random() * 0.8) or 0
+
+		if isSpawnClear(node, conn.node, progress, conn.length) then
+			break
+		end
+		conn = nil  -- mark as failed
+	end
+	if not conn then return end
+
 	local templates = TrafficConfig.ROAD_TEMPLATES
 	local templateName = templates[math.random(#templates)]
-
-	-- Spread vehicles across the road (not all at intersections)
-	local progress = spread and (0.1 + math.random() * 0.8) or 0
 
 	local x, z = RoadNetwork.getPosition(node, conn.node, progress, conn.dir, conn.laneType)
 	local yaw = dirToYaw(conn.dir)
@@ -419,6 +499,14 @@ local function updateRoadVehicles(dt)
 			local stopped = false
 			if v.laneType ~= "highway" and v.progress > 0.75 and v.progress < turnStart then
 				if not isGreenFor(v.direction) then
+					stopped = true
+				end
+			end
+
+			-- Intersection occupancy: if another vehicle is turning at our destination
+			-- intersection, stop before entering (prevents cross-traffic clipping)
+			if not stopped and v.toNode and v.progress > 0.8 then
+				if intersectionOccupied[v.toNode.id] then
 					stopped = true
 				end
 			end
@@ -579,19 +667,32 @@ end
 -- NETWORK BROADCAST
 --------------------------------------------------------------------------------
 
+local BATCH_SIZE = 20  -- max vehicles per UnreliableRemoteEvent (~720 bytes)
+
 local function broadcastPositions()
 	if not syncRemote then return end
 
-	-- Flat array: id, x, z, yaw, id, x, z, yaw, ...
+	-- Split into batches to stay under UnreliableRemoteEvent size limit (~900 bytes)
 	local payload = {}
-	for id, v in pairs(vehicles) do
-		table.insert(payload, id)
-		table.insert(payload, v.x)
-		table.insert(payload, v.z)
-		table.insert(payload, v.yaw)
+	local count = 0
+	for _, v in pairs(vehicles) do
+		payload[#payload + 1] = v.id
+		payload[#payload + 1] = v.x
+		payload[#payload + 1] = v.z
+		payload[#payload + 1] = v.yaw
+		count += 1
+
+		if count >= BATCH_SIZE then
+			syncRemote:FireAllClients(payload)
+			payload = {}
+			count = 0
+		end
 	end
 
-	syncRemote:FireAllClients(payload)
+	-- Send remaining
+	if count > 0 then
+		syncRemote:FireAllClients(payload)
+	end
 end
 
 -- Send full snapshot to a specific player (late join)
@@ -628,6 +729,10 @@ function VehicleTraffic.init()
 	-- Init railway + crossings
 	initRailway()
 
+	-- Find physical traffic light models (placed by CityBuilder)
+	findTrafficLightModels()
+	updatePhysicalLights()  -- set initial light state
+
 	-- Spawn train
 	spawnTrain()
 
@@ -642,7 +747,7 @@ function VehicleTraffic.init()
 	-- Heartbeat loop
 	RunService.Heartbeat:Connect(function(dt)
 		-- Build spatial index for collision avoidance
-		buildSegmentIndex()
+		buildIntersectionIndex()
 
 		-- Simulate
 		updateRoadVehicles(dt)

@@ -14,12 +14,12 @@ TrafficConfig.SYNC_INTERVAL  = 1 / 8               -- 0.125s between syncs
 -- ROAD VEHICLES
 --------------------------------------------------------------------------------
 
-TrafficConfig.MAX_ROAD_VEHICLES = 25
+TrafficConfig.MAX_ROAD_VEHICLES = 80
 TrafficConfig.ROAD_SPEED        = 30               -- studs/sec
 TrafficConfig.HIGHWAY_SPEED     = 50               -- studs/sec
 TrafficConfig.SPAWN_INTERVAL    = 2                 -- seconds between spawn attempts
-TrafficConfig.FOLLOW_DIST       = 18                -- start slowing (studs to vehicle ahead)
-TrafficConfig.STOP_DIST         = 7                 -- full stop distance (studs)
+TrafficConfig.FOLLOW_DIST       = 30                -- start slowing (studs to vehicle ahead)
+TrafficConfig.STOP_DIST         = 12                -- full stop distance (studs)
 TrafficConfig.SPEED_VARIATION   = 0.15              -- ±15% random speed per vehicle
 TrafficConfig.REPLENISH_INTERVAL = 10               -- seconds between replenish checks
 

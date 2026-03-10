@@ -12,6 +12,7 @@ local DecorUtils = require(script.Parent:WaitForChild("DecorCreation"):WaitForCh
 local HighSpeedTrack = require(script.Parent:WaitForChild("DecorCreation"):WaitForChild("decor"):WaitForChild("HighSpeedTrack"))
 local RailwayCrossing = require(script.Parent:WaitForChild("DecorCreation"):WaitForChild("decor"):WaitForChild("RailwayCrossing"))
 local WaterBridge = require(script.Parent:WaitForChild("DecorCreation"):WaitForChild("decor"):WaitForChild("WaterBridge"))
+local TrafficLightBuilder = require(script.Parent:WaitForChild("DecorCreation"):WaitForChild("decor"):WaitForChild("TrafficLight"))
 local RoadNetwork = require(script.Parent:WaitForChild("RoadNetwork"))
 
 local CityBuilder = {}
@@ -592,6 +593,58 @@ local function buildRoadMarkings()
 end
 
 --------------------------------------------------------------------------------
+-- TRAFFIC LIGHTS AT INTERSECTIONS
+--------------------------------------------------------------------------------
+
+local function placeTrafficLights()
+	local nodes = RoadNetwork.nodes
+	local count = 0
+
+	for _, node in pairs(nodes) do
+		-- Only place lights at road×road intersections (skip highway perimeter)
+		if node.hType == "highway" or node.vType == "highway" then continue end
+
+		local ix, iz = node.x, node.z
+		local hWidth = GTAConfig.LANE_TYPES[node.hType] and GTAConfig.LANE_TYPES[node.hType].width or 40
+		local vWidth = GTAConfig.LANE_TYPES[node.vType] and GTAConfig.LANE_TYPES[node.vType].width or 40
+		local cornerOff = 2  -- extra offset from road edge
+
+		-- Four corners of the intersection, each with a pole light facing approaching traffic.
+		-- NE corner: serves south-bound (faces north) and west-bound (faces east) traffic
+		-- SE corner: serves north-bound (faces south) and east-bound (faces west) traffic
+		-- SW corner: serves north-bound and west-bound — etc.
+		-- Simplified: one pole per approach direction (4 lights total)
+
+		local halfH = hWidth / 2 + cornerOff
+		local halfV = vWidth / 2 + cornerOff
+
+		-- Yaw convention: the light faces TOWARD approaching traffic.
+		-- East-bound traffic approaches from west → light faces west (yaw = -π/2)
+		-- etc. But CFrame rotation makes -Z the "look" direction, so:
+		-- Serving east traffic → yaw = math.pi/2 (east in our convention, -Z face points west toward traffic)
+
+		local approaches = {
+			-- { pole X offset, pole Z offset, yaw (traffic direction served), trafficDir }
+			{ halfV,  halfH, math.pi / 2, "H" },   -- NE corner, serves east-bound (H)
+			{ halfV, -halfH, 0,            "V" },   -- SE corner, serves south-bound (V)
+			{-halfV, -halfH, -math.pi / 2, "H" },   -- SW corner, serves west-bound (H)
+			{-halfV,  halfH, math.pi,       "V" },   -- NW corner, serves north-bound (V)
+		}
+
+		for _, a in ipairs(approaches) do
+			local model = TrafficLightBuilder.createPoleLight(ix + a[1], iz + a[2], a[3])
+			if model then
+				model:SetAttribute("TrafficDir", a[4])  -- "H" or "V" for phase toggling
+				count += 1
+			end
+		end
+	end
+
+	print(string.format("[CityBuilder] Placed %d traffic lights at %d intersections",
+		count, RoadNetwork.nodeCount))
+end
+
+--------------------------------------------------------------------------------
 -- PUBLIC API
 --------------------------------------------------------------------------------
 
@@ -610,6 +663,7 @@ function CityBuilder.build(decorFolderRef, vehicleFolderRef, npcFolderRef)
 	buildRailwayTracks()
 	buildWaterChannel()
 	RoadNetwork.build()
+	placeTrafficLights()
 
 	print("[CityBuilder] === City complete! ===")
 end

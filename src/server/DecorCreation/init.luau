@@ -53,6 +53,7 @@ local PrisonFenceMod = require(script:WaitForChild("decor"):WaitForChild("Prison
 local PrisonBuildingMod = require(script:WaitForChild("decor"):WaitForChild("PrisonBuilding"))
 local SkylineApproachMod = require(script:WaitForChild("decor"):WaitForChild("SkylineApproach"))
 local LobbyHallMod = require(script:WaitForChild("decor"):WaitForChild("LobbyHall"))
+local TrafficLightMod = require(script:WaitForChild("decor"):WaitForChild("TrafficLight"))
 local SpeedboatBuilder = require(script.Parent:WaitForChild("ProceduralVehicles"):WaitForChild("vehicles"):WaitForChild("Speedboat"))
 
 local decorFolder = nil
@@ -142,6 +143,8 @@ local createSkylineWall = SkylineApproachMod.createSkylineWall
 local createSkylineGlassBlue = SkylineApproachMod.createGlassBlue
 local createSkylineCityGrid = SkylineApproachMod.createCityGrid
 local createLobbyHall = LobbyHallMod.createLobbyHall
+local createPoleTrafficLight = TrafficLightMod.createPoleLight
+local createOverheadTrafficLight = TrafficLightMod.createOverheadLight
 
 -- Speedboat display (showroom decor — places procedural Speedboat model with 2 NPCs)
 local function createSpeedboatDisplay(x, z, scale, offsetY)
@@ -250,6 +253,8 @@ local PROCEDURAL_BUILDERS = {
 	skyline_glass_blue = createSkylineGlassBlue,
 	skyline_city_grid = createSkylineCityGrid,
 	speedboat_display = createSpeedboatDisplay,
+	traffic_light_pole = createPoleTrafficLight,
+	traffic_light_overhead = createOverheadTrafficLight,
 }
 
 --------------------------------------------------------------------------------
