@@ -339,7 +339,7 @@ function Convertible.build()
 	-- SIDE PANELS: 3 sections per side (rear fender, door, front fender)
 	---------------------------------------------------------------------------
 	local cockpitRearZ_side = SEAT_Z - 2.0  -- -2.5
-	local panelGap = 0.1  -- visible gap between sections
+	local panelGap = 0  -- no gap (prevents black line flicker between panels)
 
 	for _, side in ipairs({-1, 1}) do
 		local sx = side * halfW
