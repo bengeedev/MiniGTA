@@ -31,9 +31,9 @@ trafficFolder.Name = "TrafficVehicles"
 trafficFolder.Parent = Workspace
 
 local GROUND_Y = GTAConfig.GROUND_Y
+local VEHICLE_SURFACE = GROUND_Y + 2  -- terrain voxel top + clearance (same as DashOrCrash)
 
--- Per-template Y: world Y to place PrimaryPart so the model bottom sits on GROUND_Y.
--- Computed once per template using bounding-box scan (same method as DashOrCrash).
+-- Per-template Y: world Y to place PrimaryPart so the model bottom sits on surface.
 local templatePlaceY = {}   -- [templateName] = world Y for PivotTo
 
 --------------------------------------------------------------------------------
@@ -71,10 +71,10 @@ local function computePlaceY(model)
 
 	if model.PrimaryPart and lowestBottom < math.huge then
 		local ppToBottom = model.PrimaryPart.Position.Y - lowestBottom
-		return GROUND_Y + ppToBottom
+		return VEHICLE_SURFACE + ppToBottom
 	end
 
-	return GROUND_Y + 3  -- fallback
+	return VEHICLE_SURFACE + 3  -- fallback
 end
 
 local function loadTemplates()
