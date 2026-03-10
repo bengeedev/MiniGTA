@@ -26,6 +26,8 @@ local BRAKE_DECEL = 80        -- studs/sec² when braking / reversing
 local FRICTION_DECEL = 20     -- studs/sec² passive slowdown (no input)
 local REVERSE_MAX = 20        -- max reverse speed
 local PROMPT_DISTANCE = 10    -- studs to see the ProximityPrompt
+local STEER_LERP = 4          -- smoothing factor for steering input
+local ACCEL_LERP = 4          -- smoothing factor for throttle input
 
 --------------------------------------------------------------------------------
 -- STATE
@@ -187,6 +189,8 @@ function VehicleDriving.enterVehicle(player, entry)
 	seat:Sit(humanoid)
 
 	entry.driver = player
+	entry.smoothThrottle = 0
+	entry.smoothSteer = 0
 	playerVehicle[player] = entry
 	playerInput[player] = { throttle = 0, steer = 0 }
 
@@ -217,7 +221,7 @@ function VehicleDriving.exitVehicle(player)
 		-- Teleport player to the side of the vehicle
 		local hrp = character:FindFirstChild("HumanoidRootPart")
 		if hrp and entry.model.PrimaryPart then
-			local vehCF = entry.model:GetPivot()
+			local vehCF = entry.model.PrimaryPart.CFrame
 			-- Exit to the left side (driver side)
 			local exitPos = vehCF * CFrame.new(-5, 0, 0)
 			hrp.CFrame = CFrame.new(exitPos.X, GROUND_Y + 5, exitPos.Z)
@@ -249,26 +253,31 @@ end
 local function updateVehicles(dt)
 	for _, entry in pairs(drivables) do
 		if not entry.driver then continue end
-		if not entry.model or not entry.model.Parent then continue end
+
+		local root = entry.model and entry.model.PrimaryPart
+		if not root then continue end
 
 		local input = playerInput[entry.driver]
 		if not input then continue end
 
-		local throttle = input.throttle  -- -1 (reverse/brake) .. 1 (forward)
-		local steer = input.steer        -- -1 (left) .. 1 (right)
+		-- Smooth input via LERP (prevents jitter from discrete key presses)
+		local lerpAlpha = math.min(1, ACCEL_LERP * dt)
+		local steerAlpha = math.min(1, STEER_LERP * dt)
+		entry.smoothThrottle = entry.smoothThrottle + (input.throttle - entry.smoothThrottle) * lerpAlpha
+		entry.smoothSteer = entry.smoothSteer + (input.steer - entry.smoothSteer) * steerAlpha
+
+		local throttle = entry.smoothThrottle
+		local steer = entry.smoothSteer
 
 		-- Acceleration / braking
-		if throttle > 0 then
-			-- Accelerate forward
+		if throttle > 0.05 then
 			entry.speed = entry.speed + ACCELERATION * throttle * dt
 			entry.speed = math.min(entry.speed, MAX_SPEED)
-		elseif throttle < 0 then
+		elseif throttle < -0.05 then
 			if entry.speed > 1 then
-				-- Braking (moving forward)
 				entry.speed = entry.speed - BRAKE_DECEL * math.abs(throttle) * dt
 				entry.speed = math.max(entry.speed, 0)
 			else
-				-- Reverse
 				entry.speed = entry.speed + ACCELERATION * throttle * dt
 				entry.speed = math.max(entry.speed, -REVERSE_MAX)
 			end
@@ -284,22 +293,19 @@ local function updateVehicles(dt)
 		-- Steering (only when moving)
 		local speedFraction = math.abs(entry.speed) / MAX_SPEED
 		if speedFraction > 0.01 then
-			-- Reduce turn rate at high speed for stability
 			local turnMult = math.clamp(1.2 - speedFraction * 0.5, 0.5, 1.2)
 			entry.yaw = entry.yaw - steer * TURN_RATE * turnMult * dt
 		end
 
-		-- Move
+		-- Move — direct CFrame on chassis (NOT PivotTo, which causes micro-shake)
 		local fwdX = math.sin(entry.yaw)
 		local fwdZ = math.cos(entry.yaw)
-		local pivotPos = entry.model:GetPivot().Position
+		local pos = root.Position
 
-		local newX = pivotPos.X + fwdX * entry.speed * dt
-		local newZ = pivotPos.Z + fwdZ * entry.speed * dt
+		local newX = pos.X + fwdX * entry.speed * dt
+		local newZ = pos.Z + fwdZ * entry.speed * dt
 
-		entry.model:PivotTo(
-			CFrame.new(newX, entry.placeY, newZ) * CFrame.Angles(0, entry.yaw, 0)
-		)
+		root.CFrame = CFrame.new(newX, entry.placeY, newZ) * CFrame.Angles(0, entry.yaw, 0)
 	end
 end
 
