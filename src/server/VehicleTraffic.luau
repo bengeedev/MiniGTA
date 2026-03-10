@@ -66,6 +66,77 @@ local function dirToYaw(dir)
 end
 
 --------------------------------------------------------------------------------
+-- BEZIER TURN HELPERS
+--------------------------------------------------------------------------------
+
+local TURN_SPEED_FACTOR = 0.6  -- vehicles slow down during turns
+local TURN_RADIUS = 20         -- studs before/after intersection for smooth arc
+
+-- Quadratic Bezier: position at t
+local function bezierPos(t, p0x, p0z, p1x, p1z, p2x, p2z)
+	local mt = 1 - t
+	return mt * mt * p0x + 2 * mt * t * p1x + t * t * p2x,
+	       mt * mt * p0z + 2 * mt * t * p1z + t * t * p2z
+end
+
+-- Quadratic Bezier: tangent at t (unnormalized)
+local function bezierTan(t, p0x, p0z, p1x, p1z, p2x, p2z)
+	local mt = 1 - t
+	return 2 * mt * (p1x - p0x) + 2 * t * (p2x - p1x),
+	       2 * mt * (p1z - p0z) + 2 * t * (p2z - p1z)
+end
+
+-- Approximate Bezier arc length (8 linear segments)
+local function bezierLen(p0x, p0z, p1x, p1z, p2x, p2z)
+	local len = 0
+	local px, pz = p0x, p0z
+	for i = 1, 8 do
+		local nx, nz = bezierPos(i / 8, p0x, p0z, p1x, p1z, p2x, p2z)
+		local dx, dz = nx - px, nz - pz
+		len = len + math.sqrt(dx * dx + dz * dz)
+		px, pz = nx, nz
+	end
+	return len
+end
+
+-- Build turn curve: P0 is TURN_RADIUS before intersection on incoming lane,
+-- P2 is TURN_RADIUS after intersection on outgoing lane,
+-- P1 is the corner where the two lane lines meet (tangent-correct).
+-- This ensures tangent at P0 = incoming direction, tangent at P2 = outgoing direction.
+local function buildTurnCurve(v, arriveNode, nextConn)
+	local inDir = v.direction
+	local outDir = nextConn.dir
+	local inLaneType = v.laneType
+	local outLaneType = nextConn.laneType
+
+	-- Clamp entry/exit fractions so turn doesn't eat more than 40% of segment
+	local entryFrac = math.clamp(TURN_RADIUS / v.segLen, 0.05, 0.4)
+	local exitFrac  = math.clamp(TURN_RADIUS / nextConn.length, 0.05, 0.4)
+
+	-- P0: position on current segment at (1 - entryFrac)
+	local p0x, p0z = RoadNetwork.getPosition(
+		v.fromNode, arriveNode, 1 - entryFrac, inDir, inLaneType
+	)
+
+	-- P2: position on next segment at exitFrac
+	local p2x, p2z = RoadNetwork.getPosition(
+		arriveNode, nextConn.node, exitFrac, outDir, outLaneType
+	)
+
+	-- P1: corner where the incoming lane line meets the outgoing lane line.
+	-- Incoming H (east/west) → P1 has same Z as P0, same X as P2.
+	-- Incoming V (north/south) → P1 has same X as P0, same Z as P2.
+	local p1x, p1z
+	if inDir == "east" or inDir == "west" then
+		p1x, p1z = p2x, p0z
+	else
+		p1x, p1z = p0x, p2z
+	end
+
+	return p0x, p0z, p1x, p1z, p2x, p2z, entryFrac, exitFrac
+end
+
+--------------------------------------------------------------------------------
 -- CROSSING LIGHTS (physical model toggle — shared world state)
 --------------------------------------------------------------------------------
 
@@ -196,6 +267,10 @@ local function spawnRoadVehicle()
 		laneType = conn.laneType,
 		speed = getSpeed(conn.laneType),
 		segLen = conn.length,
+		-- Pre-compute next turn at destination
+		pendingConn = RoadNetwork.pickRandomConnection(
+			conn.node, RoadNetwork.oppositeDir(conn.dir)
+		),
 	}
 	vehicleCount = vehicleCount + 1
 
@@ -217,56 +292,132 @@ end
 -- ROAD VEHICLE UPDATE
 --------------------------------------------------------------------------------
 
+local function startTurn(v, arriveNode, nextConn)
+	local p0x, p0z, p1x, p1z, p2x, p2z, _entryFrac, exitFrac = buildTurnCurve(
+		v, arriveNode, nextConn
+	)
+	local arcLen = bezierLen(p0x, p0z, p1x, p1z, p2x, p2z)
+
+	v.turning = true
+	v.turnT = 0
+	v.turnLen = math.max(arcLen, 1)
+	v.turnSpeed = v.speed * TURN_SPEED_FACTOR
+	v.tp0x, v.tp0z = p0x, p0z
+	v.tp1x, v.tp1z = p1x, p1z
+	v.tp2x, v.tp2z = p2x, p2z
+
+	-- Stash the next segment so we can resume after the turn
+	v.nextNode = nextConn.node
+	v.nextDir = nextConn.dir
+	v.nextLane = nextConn.laneType
+	v.nextSegLen = nextConn.length
+	v.turnFromNode = arriveNode
+	v.turnExitFrac = exitFrac
+end
+
+local function finishTurn(v)
+	v.fromNode = v.turnFromNode
+	v.toNode = v.nextNode
+	v.direction = v.nextDir
+	v.laneType = v.nextLane
+	v.speed = getSpeed(v.nextLane)
+	v.segLen = v.nextSegLen
+	v.progress = v.turnExitFrac  -- resume part-way into next segment (curve ended here)
+	v.turning = false
+	-- Clean up turn fields
+	v.turnT, v.turnLen, v.turnSpeed = nil, nil, nil
+	v.tp0x, v.tp0z, v.tp1x, v.tp1z, v.tp2x, v.tp2z = nil, nil, nil, nil, nil, nil
+	v.nextNode, v.nextDir, v.nextLane, v.nextSegLen, v.turnFromNode = nil, nil, nil, nil, nil
+	v.turnExitFrac = nil
+
+	-- Pre-compute next connection for this new segment
+	v.pendingConn = RoadNetwork.pickRandomConnection(v.toNode, RoadNetwork.oppositeDir(v.direction))
+end
+
 local function updateRoadVehicles(dt)
 	local toRemove = {}
 
 	for id, v in pairs(vehicles) do
 		if v.isTrain then continue end
 
-		-- Stop at red light when approaching intersection
-		local stopped = false
-		if v.progress > 0.85 and v.progress < 1.0 then
-			if not isGreenFor(v.direction) then
-				stopped = true
+		if v.turning then
+			-- Advance along Bezier arc
+			v.turnT = v.turnT + (v.turnSpeed * dt) / v.turnLen
+			if v.turnT >= 1 then
+				finishTurn(v)
+			end
+		else
+			-- Pre-compute next connection if not done yet
+			if not v.pendingConn and v.toNode then
+				v.pendingConn = RoadNetwork.pickRandomConnection(
+					v.toNode, RoadNetwork.oppositeDir(v.direction)
+				)
+			end
+
+			-- Determine if a turn is needed and when it starts
+			local willTurn = v.pendingConn and v.pendingConn.dir ~= v.direction
+			local turnStart = 1.0  -- straight-through: go all the way to progress=1
+			if willTurn then
+				turnStart = 1 - math.clamp(TURN_RADIUS / v.segLen, 0.05, 0.4)
+			end
+
+			-- Stop at red light before entering intersection/turn zone
+			local stopped = false
+			if v.progress > 0.75 and v.progress < turnStart then
+				if not isGreenFor(v.direction) then
+					stopped = true
+				end
+			end
+
+			if not stopped then
+				if v.segLen > 0 then
+					v.progress = v.progress + (v.speed * dt) / v.segLen
+				end
+			end
+
+			-- Check if we should start a turn (before reaching the intersection)
+			if willTurn and v.progress >= turnStart and not stopped then
+				startTurn(v, v.toNode, v.pendingConn)
+				v.pendingConn = nil
+			elseif v.progress >= 1 then
+				-- Reached intersection — straight through or dead end
+				local nextConn = v.pendingConn
+				v.pendingConn = nil
+
+				if nextConn then
+					v.fromNode = v.toNode
+					v.toNode = nextConn.node
+					v.direction = nextConn.dir
+					v.laneType = nextConn.laneType
+					v.speed = getSpeed(nextConn.laneType)
+					v.segLen = nextConn.length
+					v.progress = 0
+					-- Pre-compute next connection
+					v.pendingConn = RoadNetwork.pickRandomConnection(
+						v.toNode, RoadNetwork.oppositeDir(v.direction)
+					)
+				else
+					table.insert(toRemove, id)
+				end
 			end
 		end
 
-		if not stopped then
-			-- Advance along segment
-			if v.segLen > 0 then
-				v.progress = v.progress + (v.speed * dt) / v.segLen
-			end
+		-- Update position (after state transitions, covers both turning and straight)
+		if v.turning then
+			local t = v.turnT
+			v.x, v.z = bezierPos(t, v.tp0x, v.tp0z, v.tp1x, v.tp1z, v.tp2x, v.tp2z)
+			local dx, dz = bezierTan(t, v.tp0x, v.tp0z, v.tp1x, v.tp1z, v.tp2x, v.tp2z)
+			v.yaw = math.atan2(dx, dz)
+		elseif not v.isTrain then
+			local x, z = RoadNetwork.getPosition(
+				v.fromNode, v.toNode,
+				math.clamp(v.progress, 0, 1),
+				v.direction, v.laneType
+			)
+			v.x = x
+			v.z = z
+			v.yaw = dirToYaw(v.direction)
 		end
-
-		if v.progress >= 1 then
-			-- Arrived at next node — pick next connection
-			local arriveNode = v.toNode
-			local excludeDir = RoadNetwork.oppositeDir(v.direction)
-			local nextConn = RoadNetwork.pickRandomConnection(arriveNode, excludeDir)
-
-			if nextConn then
-				v.fromNode = arriveNode
-				v.toNode = nextConn.node
-				v.direction = nextConn.dir
-				v.laneType = nextConn.laneType
-				v.speed = getSpeed(nextConn.laneType)
-				v.segLen = nextConn.length
-				v.progress = 0
-			else
-				-- Dead end — despawn
-				table.insert(toRemove, id)
-			end
-		end
-
-		-- Update world position from road network
-		local x, z = RoadNetwork.getPosition(
-			v.fromNode, v.toNode,
-			math.clamp(v.progress, 0, 1),
-			v.direction, v.laneType
-		)
-		v.x = x
-		v.z = z
-		v.yaw = dirToYaw(v.direction)
 	end
 
 	for _, id in ipairs(toRemove) do
