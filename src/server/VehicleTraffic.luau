@@ -496,8 +496,10 @@ local function updateRoadVehicles(dt)
 			end
 
 			-- Traffic lights: roads stop at red, highways flow freely
+			-- Stop within 20 studs of intersection (not a fraction — consistent regardless of segment length)
 			local stopped = false
-			if v.laneType ~= "highway" and v.progress > 0.75 and v.progress < turnStart then
+			local distToEnd = (1 - v.progress) * v.segLen
+			if v.laneType ~= "highway" and distToEnd < 20 and v.progress < turnStart then
 				if not isGreenFor(v.direction) then
 					stopped = true
 				end
