@@ -3356,4 +3356,293 @@ function AssetLibrary.createParkingGarage(centerX, centerZ, options)
 	return model
 end
 
+--------------------------------------------------------------------------------
+-- WAREHOUSE SPECS
+-- 2 variants: "logistics" (warm amber) and "freight" (cool cyan)
+-- 38W × 30D × 16H studs, loading dock, shipping containers, pallets
+--------------------------------------------------------------------------------
+
+local WAREHOUSE_SPECS = {
+	{
+		name = "logistics",
+		bodyMat = Enum.Material.DiamondPlate, bodyColor = Color3.fromRGB(95, 90, 85),
+		roofColor = Color3.fromRGB(70, 67, 63),
+		signText = "GLOBAL LOGISTICS", signColor = Color3.fromRGB(255, 180, 60),
+		bayCount = 3,
+		containers = {
+			{ color = Color3.fromRGB(180, 40, 40) },
+			{ color = Color3.fromRGB(40, 80, 160) },
+			{ color = Color3.fromRGB(50, 130, 60) },
+		},
+	},
+	{
+		name = "freight",
+		bodyMat = Enum.Material.Metal, bodyColor = Color3.fromRGB(90, 95, 100),
+		roofColor = Color3.fromRGB(65, 70, 75),
+		signText = "FREIGHT DEPOT", signColor = Color3.fromRGB(60, 200, 255),
+		bayCount = 4,
+		containers = {
+			{ color = Color3.fromRGB(200, 170, 40) },
+			{ color = Color3.fromRGB(210, 120, 40) },
+			{ color = Color3.fromRGB(130, 130, 135) },
+		},
+	},
+}
+
+--------------------------------------------------------------------------------
+-- createWarehouse(centerX, centerZ, options)
+-- options.variant: "logistics" or "freight" or 1-2 (default random)
+-- options.scale: number (default 1)
+-- options.parent: Instance to parent to
+-- Returns: Model
+--------------------------------------------------------------------------------
+
+function AssetLibrary.createWarehouse(centerX, centerZ, options)
+	options = options or {}
+	local scale = options.scale or 1
+
+	-- Resolve spec
+	local spec
+	if type(options.variant) == "number" then
+		spec = WAREHOUSE_SPECS[math.clamp(options.variant, 1, #WAREHOUSE_SPECS)]
+	elseif type(options.variant) == "string" then
+		for _, s in ipairs(WAREHOUSE_SPECS) do
+			if s.name == options.variant then spec = s; break end
+		end
+		spec = spec or WAREHOUSE_SPECS[math.random(1, #WAREHOUSE_SPECS)]
+	else
+		spec = WAREHOUSE_SPECS[math.random(1, #WAREHOUSE_SPECS)]
+	end
+
+	local model = Instance.new("Model")
+	model.Name = "Warehouse"
+
+	local bodyW = 38 * scale
+	local bodyH = 16 * scale
+	local bodyD = 30 * scale
+
+	-- Main body
+	local body = Instance.new("Part")
+	body.Name = "WarehouseBody"
+	body.Size = Vector3.new(bodyW, bodyH, bodyD)
+	body.Position = Vector3.new(centerX, BUILDING_BASE + bodyH / 2, centerZ)
+	body.Anchored = true
+	body.Material = spec.bodyMat
+	body.Color = spec.bodyColor
+	body:SetAttribute("ThemeRole", "building_body")
+	body:SetAttribute("BaseColor", spec.bodyColor)
+	body:SetAttribute("BaseMaterial", spec.bodyMat.Name)
+	body.Parent = model
+
+	-- Roof
+	local roof = Instance.new("Part")
+	roof.Name = "WarehouseRoof"
+	roof.Size = Vector3.new(40 * scale, 0.6 * scale, 32 * scale)
+	roof.Position = Vector3.new(centerX, BUILDING_BASE + bodyH + 0.3 * scale, centerZ)
+	roof.Anchored = true
+	roof.Material = Enum.Material.DiamondPlate
+	roof.Color = spec.roofColor
+	roof:SetAttribute("ThemeRole", "building_roof")
+	roof:SetAttribute("BaseColor", spec.roofColor)
+	roof:SetAttribute("BaseMaterial", "DiamondPlate")
+	roof.Parent = model
+
+	-- Roof vents
+	for i = 1, 2 do
+		local ventZ = centerZ + (i == 1 and -8 or 8) * scale
+		local vent = Instance.new("Part")
+		vent.Name = "RoofVent"
+		vent.Size = Vector3.new(3 * scale, 2.5 * scale, 3 * scale)
+		vent.Position = Vector3.new(centerX + 5 * scale, BUILDING_BASE + bodyH + 0.6 * scale + 1.25 * scale, ventZ)
+		vent.Anchored = true
+		vent.Material = Enum.Material.Metal
+		vent.Color = Color3.fromRGB(170, 170, 175)
+		vent.Parent = model
+	end
+
+	-- Loading dock on front (+Z)
+	local dockW = 5 * scale
+	local dockH = 3.5 * scale
+	local dockD = 26 * scale
+	local dockZ = centerZ + bodyD / 2 + dockW / 2
+
+	local dock = Instance.new("Part")
+	dock.Name = "LoadingDock"
+	dock.Size = Vector3.new(dockD, dockH, dockW)
+	dock.Position = Vector3.new(centerX, BUILDING_BASE + dockH / 2, dockZ)
+	dock.Anchored = true
+	dock.Material = Enum.Material.Concrete
+	dock.Color = Color3.fromRGB(140, 135, 130)
+	dock.Parent = model
+
+	-- Yellow safety strip
+	local strip = Instance.new("Part")
+	strip.Name = "DockStrip"
+	strip.Size = Vector3.new(dockD, 0.5 * scale, 0.3 * scale)
+	strip.Position = Vector3.new(centerX, BUILDING_BASE + dockH + 0.25 * scale, dockZ + dockW / 2 - 0.15)
+	strip.Anchored = true
+	strip.CanCollide = false
+	strip.Material = Enum.Material.Neon
+	strip.Color = Color3.fromRGB(220, 190, 0)
+	strip.Parent = model
+
+	-- Bay doors on front wall (+Z face)
+	local bayFaceZ = centerZ + bodyD / 2 + 0.15
+	local bayW = 5 * scale
+	local bayH = 7 * scale
+	local baySpacing = dockD / (spec.bayCount + 1)
+
+	for i = 1, spec.bayCount do
+		local bayX = centerX - dockD / 2 + i * baySpacing
+
+		local door = Instance.new("Part")
+		door.Name = "BayDoor"
+		door.Size = Vector3.new(bayW, bayH, 0.3 * scale)
+		door.Position = Vector3.new(bayX, BUILDING_BASE + dockH + bayH / 2, bayFaceZ)
+		door.Anchored = true
+		door.Material = Enum.Material.CorrodedMetal
+		door.Color = Color3.fromRGB(90, 65, 45)
+		door.Parent = model
+
+		local hazard = Instance.new("Part")
+		hazard.Name = "HazardStrip"
+		hazard.Size = Vector3.new(5.4 * scale, 0.5 * scale, 0.35 * scale)
+		hazard.Position = Vector3.new(bayX, BUILDING_BASE + dockH + bayH + 0.25 * scale, bayFaceZ + 0.05)
+		hazard.Anchored = true
+		hazard.CanCollide = false
+		hazard.Material = Enum.Material.Neon
+		hazard.Color = Color3.fromRGB(220, 190, 0)
+		hazard.Parent = model
+	end
+
+	-- Safety bollards
+	local bollardDiam = 0.8 * scale
+	local bollardH = 2.5 * scale
+	local bollardSpacing = dockD / 5
+	for i = 1, 4 do
+		local bollardX = centerX - dockD / 2 + i * bollardSpacing
+		local bollardZ = dockZ + dockW / 2 + 0.8 * scale
+
+		local bollard = Instance.new("Part")
+		bollard.Name = "SafetyBollard"
+		bollard.Shape = Enum.PartType.Cylinder
+		bollard.Size = Vector3.new(bollardH, bollardDiam, bollardDiam)
+		bollard.CFrame = CFrame.new(bollardX, BUILDING_BASE + bollardH / 2, bollardZ) * CFrame.Angles(0, 0, math.rad(90))
+		bollard.Anchored = true
+		bollard.Material = Enum.Material.SmoothPlastic
+		bollard.Color = Color3.fromRGB(220, 190, 0)
+		bollard.Parent = model
+	end
+
+	-- Neon sign on front (+Z face, upper)
+	local signW = 14 * scale
+	local signH = 2.5 * scale
+	local signPart = Instance.new("Part")
+	signPart.Name = "WarehouseSign"
+	signPart.Size = Vector3.new(signW, signH, 0.4 * scale)
+	signPart.Position = Vector3.new(centerX, BUILDING_BASE + bodyH - 3.5 * scale, centerZ + bodyD / 2 + 0.3)
+	signPart.Anchored = true
+	signPart.Material = Enum.Material.Neon
+	signPart.Color = spec.signColor
+	signPart:SetAttribute("ThemeRole", "building_neon")
+	signPart:SetAttribute("BaseColor", spec.signColor)
+	signPart:SetAttribute("BaseMaterial", "Neon")
+	signPart.Parent = model
+
+	local gui = Instance.new("SurfaceGui")
+	gui.Face = Enum.NormalId.Back
+	gui.Parent = signPart
+	local txt = Instance.new("TextLabel")
+	txt.Size = UDim2.new(1, 0, 1, 0)
+	txt.BackgroundTransparency = 1
+	txt.Font = Enum.Font.GothamBold
+	txt.Text = spec.signText
+	txt.TextColor3 = Color3.new(1, 1, 1)
+	txt.TextScaled = true
+	txt.Parent = gui
+
+	local signLight = Instance.new("PointLight")
+	signLight.Brightness = 1.5
+	signLight.Range = 16
+	signLight.Color = spec.signColor
+	signLight.Parent = signPart
+
+	-- Shipping containers (behind building, -Z side)
+	local containerBaseZ = centerZ - bodyD / 2 - 2 * scale
+	local containerH = 5 * scale
+	local containerD = 5 * scale
+
+	for i = 1, 3 do
+		local cW = 11 * scale
+		local cZ, cY
+		if i <= 2 then
+			cZ = containerBaseZ - (i - 1) * (containerD + 1 * scale)
+			cY = BUILDING_BASE + containerH / 2
+		else
+			cZ = containerBaseZ
+			cY = BUILDING_BASE + containerH + containerH / 2
+		end
+
+		local container = Instance.new("Part")
+		container.Name = "ShippingContainer"
+		container.Size = Vector3.new(cW, containerH, containerD)
+		container.Position = Vector3.new(centerX, cY, cZ)
+		container.Anchored = true
+		container.Material = Enum.Material.DiamondPlate
+		container.Color = spec.containers[i].color
+		container.Parent = model
+
+		local ridge = Instance.new("Part")
+		ridge.Name = "ContainerRidge"
+		ridge.Size = Vector3.new(cW + 0.2, 0.4 * scale, containerD + 0.2)
+		ridge.Position = Vector3.new(centerX, cY + containerH / 2 + 0.2 * scale, cZ)
+		ridge.Anchored = true
+		ridge.Material = Enum.Material.Metal
+		ridge.Color = Color3.fromRGB(60, 60, 65)
+		ridge.Parent = model
+	end
+
+	-- Pallets + crates (+X side)
+	local palletBaseX = centerX + bodyW / 2 + 2 * scale
+	for i = 1, 3 do
+		local palletX = palletBaseX + (i - 1) * 4 * scale
+
+		local pallet = Instance.new("Part")
+		pallet.Name = "Pallet"
+		pallet.Size = Vector3.new(2.5 * scale, 0.3 * scale, 2.5 * scale)
+		pallet.Position = Vector3.new(palletX, BUILDING_BASE + 0.15 * scale, centerZ)
+		pallet.Anchored = true
+		pallet.Material = Enum.Material.WoodPlanks
+		pallet.Color = Color3.fromRGB(160, 120, 70)
+		pallet.Parent = model
+
+		local crateH = (1.5 + i * 0.5) * scale
+		local crate = Instance.new("Part")
+		crate.Name = "Crate"
+		crate.Size = Vector3.new(2.0 * scale, crateH, 2.0 * scale)
+		crate.Position = Vector3.new(palletX, BUILDING_BASE + 0.3 * scale + crateH / 2, centerZ)
+		crate.Anchored = true
+		crate.Material = Enum.Material.WoodPlanks
+		crate.Color = Color3.fromRGB(140, 100, 55)
+		crate.Parent = model
+	end
+
+	-- Windows on all 4 faces (sparse, industrial)
+	local litColor = Color3.fromRGB(200, 170, 80)
+	addWindowsToFace(model, "z", centerZ + bodyD / 2 + 0.05, centerX, bodyW, BUILDING_BASE, 2, bodyH / 2, 2.0, 1.8, 3.0, litColor, 0.20)
+	addWindowsToFace(model, "z", centerZ - bodyD / 2 - 0.05, centerX, bodyW, BUILDING_BASE, 2, bodyH / 2, 2.0, 1.8, 3.0, litColor, 0.15)
+	addWindowsToFace(model, "x", centerX + bodyW / 2 + 0.05, centerZ, bodyD, BUILDING_BASE, 2, bodyH / 2, 2.0, 1.8, 3.0, litColor, 0.15)
+	addWindowsToFace(model, "x", centerX - bodyW / 2 - 0.05, centerZ, bodyD, BUILDING_BASE, 2, bodyH / 2, 2.0, 1.8, 3.0, litColor, 0.15)
+
+	if options.parent then
+		model.Parent = options.parent
+	end
+
+	return model
+end
+
+function AssetLibrary.getWarehouseVariants()
+	return { "logistics", "freight" }
+end
+
 return AssetLibrary
