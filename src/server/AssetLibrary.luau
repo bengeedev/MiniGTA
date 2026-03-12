@@ -5038,4 +5038,257 @@ function AssetLibrary.createPrisonBuilding(centerX, centerZ, options)
 	return model
 end
 
+--------------------------------------------------------------------------------
+-- WHITE HOUSE
+-- Iconic government building: main body with windows, south portico with
+-- semicircular colonnade, American flag, iron fence perimeter.
+-- Options: parent, scale
+--------------------------------------------------------------------------------
+
+function AssetLibrary.createWhiteHouse(centerX, centerZ, options)
+	options = options or {}
+	local scale = options.scale or 1
+
+	local model = Instance.new("Model")
+	model.Name = "WhiteHouse"
+
+	local bodyColor = Color3.fromRGB(245, 245, 240)
+	local trimColor = Color3.fromRGB(235, 235, 228)
+	local roofColor = Color3.fromRGB(130, 130, 135)
+	local winColor  = Color3.fromRGB(255, 220, 140)
+
+	---------------------------------------------------------------------------
+	-- DIMENSIONS
+	---------------------------------------------------------------------------
+	local bodyW = 80 * scale   -- width along X
+	local bodyD = 28 * scale   -- depth along Z
+	local bodyH = 22 * scale
+	local winFloors = 3
+	local winFloorH = 6 * scale
+
+	local halfW = bodyW / 2
+	local halfD = bodyD / 2
+	local frontZ = centerZ + halfD   -- south face (+Z)
+	local backZ  = centerZ - halfD
+
+	---------------------------------------------------------------------------
+	-- 1. MAIN BODY
+	---------------------------------------------------------------------------
+	local main = Instance.new("Part")
+	main.Name = "MainBody"
+	main.Size = Vector3.new(bodyW, bodyH, bodyD)
+	main.Position = Vector3.new(centerX, BUILDING_BASE + bodyH / 2, centerZ)
+	main.Anchored = true
+	main.Material = Enum.Material.SmoothPlastic
+	main.Color = bodyColor
+	main.Parent = model
+
+	-- Windows on all 4 faces (2 rows)
+	addWindowsToFace(model, "z", frontZ + 0.15, centerX, bodyW, BUILDING_BASE, winFloors, winFloorH, 2.8 * scale, 4 * scale, 1.8, winColor, 0.7)
+	addWindowsToFace(model, "z", backZ - 0.15, centerX, bodyW, BUILDING_BASE, winFloors, winFloorH, 2.8 * scale, 4 * scale, 1.8, winColor, 0.3)
+	addWindowsToFace(model, "x", centerX - halfW - 0.15, centerZ, bodyD, BUILDING_BASE, winFloors, winFloorH, 2.8 * scale, 4 * scale, 1.8, winColor, 0.5)
+	addWindowsToFace(model, "x", centerX + halfW + 0.15, centerZ, bodyD, BUILDING_BASE, winFloors, winFloorH, 2.8 * scale, 4 * scale, 1.8, winColor, 0.5)
+
+	-- Floor band between stories
+	local bandY = BUILDING_BASE + bodyH * 0.48
+	local band = Instance.new("Part")
+	band.Name = "FloorBand"
+	band.Size = Vector3.new(bodyW + 0.3, 0.7 * scale, bodyD + 0.3)
+	band.Position = Vector3.new(centerX, bandY, centerZ)
+	band.Anchored = true
+	band.CanCollide = false
+	band.Material = Enum.Material.SmoothPlastic
+	band.Color = trimColor
+	band.Parent = model
+
+	-- Roof balustrade
+	local balH = 2 * scale
+	local balustrade = Instance.new("Part")
+	balustrade.Name = "Balustrade"
+	balustrade.Size = Vector3.new(bodyW + 0.5, balH, bodyD + 0.5)
+	balustrade.Position = Vector3.new(centerX, BUILDING_BASE + bodyH + balH / 2, centerZ)
+	balustrade.Anchored = true
+	balustrade.Material = Enum.Material.SmoothPlastic
+	balustrade.Color = trimColor
+	balustrade.Parent = model
+
+	-- Flat roof
+	local roofCap = Instance.new("Part")
+	roofCap.Name = "RoofCap"
+	roofCap.Size = Vector3.new(bodyW - 1 * scale, 0.4 * scale, bodyD - 1 * scale)
+	roofCap.Position = Vector3.new(centerX, BUILDING_BASE + bodyH + balH + 0.2 * scale, centerZ)
+	roofCap.Anchored = true
+	roofCap.Material = Enum.Material.Metal
+	roofCap.Color = roofColor
+	roofCap.Parent = model
+
+	---------------------------------------------------------------------------
+	-- 2. SOUTH PORTICO — Semicircular curved colonnade
+	---------------------------------------------------------------------------
+	local porticoRadius = 14 * scale
+	local NUM_COLUMNS = 8
+	local colRadius = 1 * scale
+	local colHeight = bodyH - 3 * scale
+
+	for i = 0, NUM_COLUMNS do
+		local angle = math.rad(-90 + i * (180 / NUM_COLUMNS))
+		local cx = centerX + porticoRadius * math.sin(angle)
+		local cz = frontZ + porticoRadius * math.cos(angle)
+
+		local col = Instance.new("Part")
+		col.Name = "SouthColumn"
+		col.Shape = Enum.PartType.Cylinder
+		col.Size = Vector3.new(colHeight, colRadius * 2, colRadius * 2)
+		col.CFrame = CFrame.new(cx, BUILDING_BASE + colHeight / 2, cz)
+			* CFrame.Angles(0, 0, math.rad(90))
+		col.Anchored = true
+		col.Material = Enum.Material.SmoothPlastic
+		col.Color = bodyColor
+		col.Parent = model
+	end
+
+	-- Semicircular base under portico columns
+	local baseH = 2 * scale
+	local basePart = Instance.new("Part")
+	basePart.Name = "PorticoBase"
+	basePart.Shape = Enum.PartType.Cylinder
+	basePart.Size = Vector3.new(baseH, porticoRadius * 2 + 2 * scale, porticoRadius * 2 + 2 * scale)
+	basePart.CFrame = CFrame.new(centerX, BUILDING_BASE + baseH / 2 + 0.5, frontZ)
+		* CFrame.Angles(0, 0, math.rad(90))
+	basePart.Anchored = true
+	basePart.Material = Enum.Material.SmoothPlastic
+	basePart.Color = trimColor
+	basePart.Parent = model
+
+	-- Entablature cap on top of columns
+	local capH = 2 * scale
+	local capPart = Instance.new("Part")
+	capPart.Name = "PorticoCap"
+	capPart.Shape = Enum.PartType.Cylinder
+	capPart.Size = Vector3.new(capH, porticoRadius * 2 + 2 * scale, porticoRadius * 2 + 2 * scale)
+	capPart.CFrame = CFrame.new(centerX, BUILDING_BASE + colHeight + capH / 2, frontZ)
+		* CFrame.Angles(0, 0, math.rad(90))
+	capPart.Anchored = true
+	capPart.Material = Enum.Material.SmoothPlastic
+	capPart.Color = trimColor
+	capPart.Parent = model
+
+	---------------------------------------------------------------------------
+	-- 3. AMERICAN FLAG
+	---------------------------------------------------------------------------
+	local poleH = 10 * scale
+	local pole = Instance.new("Part")
+	pole.Name = "FlagPole"
+	pole.Shape = Enum.PartType.Cylinder
+	pole.Size = Vector3.new(poleH, 0.3 * scale, 0.3 * scale)
+	pole.CFrame = CFrame.new(centerX, BUILDING_BASE + bodyH + balH + poleH / 2, centerZ)
+		* CFrame.Angles(0, 0, math.rad(90))
+	pole.Anchored = true
+	pole.Material = Enum.Material.Metal
+	pole.Color = Color3.fromRGB(180, 180, 180)
+	pole.Parent = model
+
+	local flagW = 5 * scale
+	local flagH = 3.5 * scale
+	local flagY = BUILDING_BASE + bodyH + balH + poleH - flagH / 2
+
+	local stripes = Instance.new("Part")
+	stripes.Name = "FlagStripes"
+	stripes.Size = Vector3.new(flagW, flagH, 0.15 * scale)
+	stripes.Position = Vector3.new(centerX + flagW / 2 + 0.2 * scale, flagY, centerZ + 0.2 * scale)
+	stripes.Anchored = true
+	stripes.CanCollide = false
+	stripes.Material = Enum.Material.SmoothPlastic
+	stripes.Color = Color3.fromRGB(200, 40, 40)
+	stripes.Parent = model
+
+	local canton = Instance.new("Part")
+	canton.Name = "FlagCanton"
+	canton.Size = Vector3.new(flagW * 0.4, flagH * 0.55, 0.2 * scale)
+	canton.Position = Vector3.new(centerX + flagW * 0.2 + 0.2 * scale, flagY + flagH * 0.22, centerZ + 0.25 * scale)
+	canton.Anchored = true
+	canton.CanCollide = false
+	canton.Material = Enum.Material.SmoothPlastic
+	canton.Color = Color3.fromRGB(40, 50, 120)
+	canton.Parent = model
+
+	---------------------------------------------------------------------------
+	-- 4. BLACK IRON FENCE — enclosing the property
+	---------------------------------------------------------------------------
+	local fenceColor = Color3.fromRGB(20, 20, 25)
+	local fenceH = 10 * scale
+	local barSpacing = 3 * scale
+	local barThick = 0.35 * scale
+	local railH = 0.5 * scale
+	local tipSize = 0.8 * scale
+
+	local function buildFence(x1, z1, x2, z2)
+		local dx = x2 - x1
+		local dz = z2 - z1
+		local len = math.sqrt(dx * dx + dz * dz)
+		local fcx, fcz = (x1 + x2) / 2, (z1 + z2) / 2
+		local angle = math.atan2(dx, dz)
+
+		-- Rails (top and bottom)
+		for _, ry in ipairs({ BUILDING_BASE + 1 * scale, BUILDING_BASE + fenceH - 1 * scale }) do
+			local rail = Instance.new("Part")
+			rail.Name = "FenceRail"
+			rail.Size = Vector3.new(railH, railH, len)
+			rail.CFrame = CFrame.new(fcx, ry, fcz) * CFrame.Angles(0, angle, 0)
+			rail.Anchored = true
+			rail.CanCollide = false
+			rail.Material = Enum.Material.Metal
+			rail.Color = fenceColor
+			rail.Parent = model
+		end
+
+		-- Bars + spear tips
+		local numBars = math.floor(len / barSpacing)
+		for i = 0, numBars do
+			local t = numBars > 0 and (i / numBars) or 0.5
+			local bx = x1 + dx * t
+			local bz = z1 + dz * t
+
+			local bar = Instance.new("Part")
+			bar.Name = "FenceBar"
+			bar.Size = Vector3.new(barThick, fenceH, barThick)
+			bar.Position = Vector3.new(bx, BUILDING_BASE + fenceH / 2, bz)
+			bar.Anchored = true
+			bar.CanCollide = false
+			bar.Material = Enum.Material.Metal
+			bar.Color = fenceColor
+			bar.Parent = model
+
+			local tip = Instance.new("Part")
+			tip.Name = "SpearTip"
+			tip.Size = Vector3.new(tipSize, tipSize, tipSize)
+			tip.CFrame = CFrame.new(bx, BUILDING_BASE + fenceH + tipSize * 0.4, bz)
+				* CFrame.Angles(0, 0, math.rad(45))
+			tip.Anchored = true
+			tip.CanCollide = false
+			tip.Material = Enum.Material.Metal
+			tip.Color = fenceColor
+			tip.Parent = model
+		end
+	end
+
+	-- Fence corners: symmetric around center
+	local margin = 30 * scale
+	local fenceLeft  = centerX - halfW - margin
+	local fenceRight = centerX + halfW + margin
+	local fenceFront = frontZ + porticoRadius + 25 * scale
+	local fenceBack  = backZ - 10 * scale
+
+	buildFence(fenceLeft, fenceFront, fenceRight, fenceFront)  -- front
+	buildFence(fenceLeft, fenceBack, fenceLeft, fenceFront)    -- left side
+	buildFence(fenceRight, fenceBack, fenceRight, fenceFront)  -- right side
+	buildFence(fenceLeft, fenceBack, fenceRight, fenceBack)    -- back
+
+	if options.parent then
+		model.Parent = options.parent
+	end
+
+	return model
+end
+
 return AssetLibrary
