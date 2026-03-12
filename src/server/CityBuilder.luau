@@ -738,8 +738,8 @@ local function populateCompounds()
 		--------------------------------------------------------------------
 		if rect.name == "nuclear" then
 			-- Concrete pad over bumpy terrain so buildings don't sink
-			local padH = 1
-			local padY = GROUND_Y + 2  -- raised above terrain voxel surface
+			local padH = 1.5
+			local padY = GROUND_Y + 3  -- raised well above bumpy Ground terrain
 			local pad = Instance.new("Part")
 			pad.Name = "CompoundPad"
 			pad.Size = Vector3.new(w - 4, padH, d - 4)
