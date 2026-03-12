@@ -4840,4 +4840,202 @@ function AssetLibrary.getConstructionSiteVariants()
 	return { "mega", "skyline" }
 end
 
+--------------------------------------------------------------------------------
+-- createPrisonBuilding(centerX, centerZ, options)
+-- Brutalist concrete cell block: barred windows, metal doors, floodlights, parapet.
+-- Random 3-4 stories, 35-55W × 18-26D studs.
+-- options.scale: number (default 1)
+-- options.parent: Instance to parent to
+-- Returns: Model
+--------------------------------------------------------------------------------
+
+function AssetLibrary.createPrisonBuilding(centerX, centerZ, options)
+	options = options or {}
+	local scale = options.scale or 1
+
+	local model = Instance.new("Model")
+	model.Name = "PrisonBuilding"
+
+	-- Palette
+	local palettes = {
+		{ main = Color3.fromRGB(135, 130, 125), trim = Color3.fromRGB(100, 95, 90) },
+		{ main = Color3.fromRGB(125, 125, 120), trim = Color3.fromRGB(90, 88, 85) },
+		{ main = Color3.fromRGB(140, 135, 128), trim = Color3.fromRGB(105, 100, 95) },
+	}
+	local palette = palettes[math.random(#palettes)]
+
+	local stories = math.random(3, 4)
+	local storyH = 6 * scale
+	local buildW = (35 + math.random() * 20) * scale
+	local buildD = (18 + math.random() * 8) * scale
+	local totalH = stories * storyH
+	local halfW = buildW / 2
+	local halfD = buildD / 2
+
+	local function makePart(name, size, cf, color, material)
+		local p = Instance.new("Part")
+		p.Name = name
+		p.Size = size
+		p.CFrame = cf
+		p.Color = color
+		p.Material = material or Enum.Material.Concrete
+		p.Anchored = true
+		p.CanCollide = false
+		p.Parent = model
+		return p
+	end
+
+	-- Foundation
+	makePart("Foundation",
+		Vector3.new(buildD + 2 * scale, 1 * scale, buildW + 2 * scale),
+		CFrame.new(centerX, BUILDING_BASE + 0.5 * scale, centerZ),
+		Color3.fromRGB(160, 155, 148))
+
+	-- Main block
+	makePart("MainBlock",
+		Vector3.new(buildD, totalH, buildW),
+		CFrame.new(centerX, BUILDING_BASE + 1 * scale + totalH / 2, centerZ),
+		palette.main)
+
+	-- Parapet
+	local roofY = BUILDING_BASE + 1 * scale + totalH
+	local parapetH = 1.5 * scale
+
+	for _, sx in ipairs({ -1, 1 }) do
+		makePart("Parapet",
+			Vector3.new(0.8 * scale, parapetH, buildW + 0.4 * scale),
+			CFrame.new(centerX + sx * (halfD + 0.2 * scale), roofY + parapetH / 2, centerZ),
+			palette.trim)
+	end
+	for _, sz in ipairs({ -1, 1 }) do
+		makePart("Parapet",
+			Vector3.new(buildD + 1.2 * scale, parapetH, 0.8 * scale),
+			CFrame.new(centerX, roofY + parapetH / 2, centerZ + sz * (halfW + 0.2 * scale)),
+			palette.trim)
+	end
+
+	-- Flat roof
+	makePart("Roof",
+		Vector3.new(buildD - 0.5 * scale, 0.3 * scale, buildW - 0.5 * scale),
+		CFrame.new(centerX, roofY + 0.15 * scale, centerZ),
+		Color3.fromRGB(90, 88, 85))
+
+	-- Roof vents
+	for _ = 1, math.random(2, 4) do
+		local vx = centerX + (math.random() - 0.5) * (buildD - 4 * scale)
+		local vz = centerZ + (math.random() - 0.5) * (buildW - 4 * scale)
+		local vSize = (1.5 + math.random() * 1.5) * scale
+		makePart("RoofVent",
+			Vector3.new(vSize, vSize * 0.8, vSize),
+			CFrame.new(vx, roofY + vSize * 0.4, vz),
+			Color3.fromRGB(110, 108, 105), Enum.Material.DiamondPlate)
+	end
+
+	-- Barred windows helper
+	local function buildWindow(cx, cy, cz, winW, winH, faceAxis)
+		if faceAxis == "z" then
+			makePart("WindowRecess", Vector3.new(winW, winH, 0.6), CFrame.new(cx, cy, cz),
+				Color3.fromRGB(30, 30, 35), Enum.Material.SmoothPlastic)
+			local numBars = math.max(2, math.floor(winW / 0.6))
+			local barSpacing = winW / (numBars + 1)
+			for i = 1, numBars do
+				makePart("WindowBar", Vector3.new(0.12, winH - 0.2, 0.12),
+					CFrame.new(cx - winW / 2 + i * barSpacing, cy, cz + 0.25),
+					Color3.fromRGB(70, 70, 75), Enum.Material.Metal)
+			end
+		else
+			makePart("WindowRecess", Vector3.new(0.6, winH, winW), CFrame.new(cx, cy, cz),
+				Color3.fromRGB(30, 30, 35), Enum.Material.SmoothPlastic)
+			local numBars = math.max(2, math.floor(winW / 0.6))
+			local barSpacing = winW / (numBars + 1)
+			for i = 1, numBars do
+				makePart("WindowBar", Vector3.new(0.12, winH - 0.2, 0.12),
+					CFrame.new(cx + 0.25, cy, cz - winW / 2 + i * barSpacing),
+					Color3.fromRGB(70, 70, 75), Enum.Material.Metal)
+			end
+		end
+	end
+
+	-- Windows on all 4 faces
+	local winW = 1.8 * scale
+	local winH = 1.4 * scale
+	local winSpacing = 4.5 * scale
+	local numWins = math.floor(buildW / winSpacing)
+	local winStartZ = centerZ - (numWins - 1) * winSpacing / 2
+
+	for story = 1, stories do
+		local winY = BUILDING_BASE + 1 * scale + (story - 0.4) * storyH
+		for i = 0, numWins - 1 do
+			local wz = winStartZ + i * winSpacing
+			buildWindow(centerX + halfD + 0.01, winY, wz, winW, winH, "x")
+			buildWindow(centerX - halfD - 0.01, winY, wz, winW, winH, "x")
+		end
+	end
+
+	local sideWins = math.max(1, math.floor(buildD / winSpacing) - 1)
+	local sideStartX = centerX - (sideWins - 1) * winSpacing / 2
+	for story = 1, stories do
+		local winY = BUILDING_BASE + 1 * scale + (story - 0.4) * storyH
+		for i = 0, sideWins - 1 do
+			local wx = sideStartX + i * winSpacing
+			buildWindow(wx, winY, centerZ - halfW - 0.01, winW, winH, "z")
+			buildWindow(wx, winY, centerZ + halfW + 0.01, winW, winH, "z")
+		end
+	end
+
+	-- Heavy metal doors (one on each long face)
+	local doorW = 3 * scale
+	local doorH = 4 * scale
+	for _, sx in ipairs({ -1, 1 }) do
+		local doorX = centerX + sx * (halfD + 0.05)
+		makePart("DoorFrame",
+			Vector3.new(0.8 * scale, doorH + 0.5 * scale, doorW + 1 * scale),
+			CFrame.new(doorX, BUILDING_BASE + 1 * scale + (doorH + 0.5 * scale) / 2, centerZ),
+			palette.trim)
+		makePart("Door",
+			Vector3.new(0.4 * scale, doorH, doorW),
+			CFrame.new(doorX + sx * 0.2, BUILDING_BASE + 1 * scale + doorH / 2, centerZ),
+			Color3.fromRGB(60, 65, 70), Enum.Material.DiamondPlate)
+	end
+
+	-- Floodlights
+	local floodY = roofY - 1 * scale
+	for _, fl in ipairs({
+		{ x = centerX + halfD + 0.3, z = centerZ - halfW * 0.5 },
+		{ x = centerX + halfD + 0.3, z = centerZ + halfW * 0.5 },
+		{ x = centerX - halfD - 0.3, z = centerZ - halfW * 0.5 },
+		{ x = centerX - halfD - 0.3, z = centerZ + halfW * 0.5 },
+	}) do
+		local light = makePart("Floodlight",
+			Vector3.new(0.8 * scale, 0.5 * scale, 1.2 * scale),
+			CFrame.new(fl.x, floodY, fl.z) * CFrame.Angles(math.rad(30), 0, 0),
+			Color3.fromRGB(60, 60, 65), Enum.Material.Metal)
+
+		local spot = Instance.new("SpotLight")
+		spot.Face = Enum.NormalId.Bottom
+		spot.Angle = 50
+		spot.Range = 25
+		spot.Brightness = 2
+		spot.Color = Color3.fromRGB(255, 230, 180)
+		spot.Parent = light
+	end
+
+	-- Story trim lines
+	for story = 1, stories - 1 do
+		local trimY = BUILDING_BASE + 1 * scale + story * storyH
+		for _, sx in ipairs({ -1, 1 }) do
+			makePart("StoryTrim",
+				Vector3.new(0.15 * scale, 0.4 * scale, buildW + 0.1 * scale),
+				CFrame.new(centerX + sx * (halfD + 0.05), trimY, centerZ),
+				palette.trim)
+		end
+	end
+
+	if options.parent then
+		model.Parent = options.parent
+	end
+
+	return model
+end
+
 return AssetLibrary
