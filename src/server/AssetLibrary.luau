@@ -7525,4 +7525,22 @@ function AssetLibrary.createWaterPlant(centerX, centerZ, options)
 	return model, clarifierAnims
 end
 
+--------------------------------------------------------------------------------
+-- MILITARY BASE (stub — props will be added later)
+-- Options: parent, scale
+--------------------------------------------------------------------------------
+
+function AssetLibrary.createMilitaryBase(centerX, centerZ, options)
+	options = options or {}
+
+	local model = Instance.new("Model")
+	model.Name = "MilitaryBase"
+
+	if options.parent then
+		model.Parent = options.parent
+	end
+
+	return model
+end
+
 return AssetLibrary
