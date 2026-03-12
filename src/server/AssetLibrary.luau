@@ -3645,4 +3645,275 @@ function AssetLibrary.getWarehouseVariants()
 	return { "logistics", "freight" }
 end
 
+--------------------------------------------------------------------------------
+-- FACTORY SPECS
+-- 2 variants: "industrial" (warm amber, 3 stacks) and "factory" (cool cyan, 2 stacks)
+-- 36W × 30D × 22H studs, smokestacks, loading bays, hazard stripes
+--------------------------------------------------------------------------------
+
+local FACTORY_SPECS = {
+	{
+		name = "industrial",
+		bodyMat = Enum.Material.DiamondPlate, bodyColor = Color3.fromRGB(85, 85, 90),
+		roofColor = Color3.fromRGB(65, 65, 70),
+		signText = "INDUSTRIAL WORKS", signColor = Color3.fromRGB(255, 180, 60),
+		stacks = 3,
+		containers = {
+			{ color = Color3.fromRGB(180, 40, 40), w = 12 },
+			{ color = Color3.fromRGB(40, 80, 160), w = 10 },
+			{ color = Color3.fromRGB(50, 130, 60), w = 11 },
+		},
+	},
+	{
+		name = "factory",
+		bodyMat = Enum.Material.Metal, bodyColor = Color3.fromRGB(95, 95, 100),
+		roofColor = Color3.fromRGB(70, 70, 75),
+		signText = "FACTORY CO.", signColor = Color3.fromRGB(60, 200, 255),
+		stacks = 2,
+		containers = {
+			{ color = Color3.fromRGB(200, 170, 40), w = 11 },
+			{ color = Color3.fromRGB(210, 120, 40), w = 10 },
+			{ color = Color3.fromRGB(130, 130, 135), w = 12 },
+		},
+	},
+}
+
+--------------------------------------------------------------------------------
+-- createFactory(centerX, centerZ, options)
+-- options.variant: "industrial" or "factory" or 1-2 (default random)
+-- options.scale: number (default 1)
+-- options.parent: Instance to parent to
+-- Returns: Model
+--------------------------------------------------------------------------------
+
+function AssetLibrary.createFactory(centerX, centerZ, options)
+	options = options or {}
+	local scale = options.scale or 1
+
+	local spec
+	if type(options.variant) == "number" then
+		spec = FACTORY_SPECS[math.clamp(options.variant, 1, #FACTORY_SPECS)]
+	elseif type(options.variant) == "string" then
+		for _, s in ipairs(FACTORY_SPECS) do
+			if s.name == options.variant then spec = s; break end
+		end
+		spec = spec or FACTORY_SPECS[math.random(1, #FACTORY_SPECS)]
+	else
+		spec = FACTORY_SPECS[math.random(1, #FACTORY_SPECS)]
+	end
+
+	local model = Instance.new("Model")
+	model.Name = "Factory"
+
+	local bodyW = 36 * scale
+	local bodyH = 22 * scale
+	local bodyD = 30 * scale
+
+	-- Main body
+	local body = Instance.new("Part")
+	body.Name = "FactoryBody"
+	body.Size = Vector3.new(bodyW, bodyH, bodyD)
+	body.Position = Vector3.new(centerX, BUILDING_BASE + bodyH / 2, centerZ)
+	body.Anchored = true
+	body.Material = spec.bodyMat
+	body.Color = spec.bodyColor
+	body:SetAttribute("ThemeRole", "building_body")
+	body:SetAttribute("BaseColor", spec.bodyColor)
+	body:SetAttribute("BaseMaterial", spec.bodyMat.Name)
+	body.Parent = model
+
+	-- Roof
+	local roof = Instance.new("Part")
+	roof.Name = "FactoryRoof"
+	roof.Size = Vector3.new(bodyW + 1 * scale, 0.8 * scale, bodyD + 1 * scale)
+	roof.Position = Vector3.new(centerX, BUILDING_BASE + bodyH + 0.4 * scale, centerZ)
+	roof.Anchored = true
+	roof.Material = Enum.Material.DiamondPlate
+	roof.Color = spec.roofColor
+	roof:SetAttribute("ThemeRole", "building_roof")
+	roof:SetAttribute("BaseColor", spec.roofColor)
+	roof:SetAttribute("BaseMaterial", "DiamondPlate")
+	roof.Parent = model
+
+	-- Corner columns with hazard stripes on front pair
+	local colSize = 1.5 * scale
+	local colH = bodyH + 1 * scale
+	local halfW = bodyW / 2 - colSize / 2
+	local halfD = bodyD / 2 - colSize / 2
+	for _, ox in ipairs({ -halfW, halfW }) do
+		for _, oz in ipairs({ -halfD, halfD }) do
+			local col = Instance.new("Part")
+			col.Name = "FactoryColumn"
+			col.Size = Vector3.new(colSize, colH, colSize)
+			col.Position = Vector3.new(centerX + ox, BUILDING_BASE + colH / 2, centerZ + oz)
+			col.Anchored = true
+			col.Material = Enum.Material.Concrete
+			col.Color = Color3.fromRGB(120, 120, 125)
+			col.Parent = model
+		end
+	end
+
+	-- Hazard stripes on front (+Z) columns
+	for _, ox in ipairs({ -halfW, halfW }) do
+		for band = 0, 3 do
+			local stripe = Instance.new("Part")
+			stripe.Name = "HazardStripe"
+			stripe.Size = Vector3.new(colSize + 0.1, 0.8 * scale, colSize + 0.1)
+			stripe.Position = Vector3.new(centerX + ox, BUILDING_BASE + 2 * scale + band * 2.5 * scale, centerZ + halfD)
+			stripe.Anchored = true
+			stripe.CanCollide = false
+			stripe.Material = Enum.Material.SmoothPlastic
+			stripe.Color = (band % 2 == 0) and Color3.fromRGB(220, 190, 0) or Color3.fromRGB(30, 30, 30)
+			stripe.Parent = model
+		end
+	end
+
+	-- Smokestacks on roof (toward -Z back)
+	local stackDiam = 3 * scale
+	local stackH = 14 * scale
+	local stackTopY = BUILDING_BASE + bodyH + 0.8 * scale + stackH / 2
+	local stackSpacing = bodyD / (spec.stacks + 1)
+	local smokeData = {}
+
+	for i = 1, spec.stacks do
+		local stackZ = centerZ - bodyD / 2 + i * stackSpacing
+		local stackX = centerX - bodyW / 2 + 5 * scale
+
+		local stack = Instance.new("Part")
+		stack.Name = "Smokestack"
+		stack.Shape = Enum.PartType.Cylinder
+		stack.Size = Vector3.new(stackH, stackDiam, stackDiam)
+		stack.CFrame = CFrame.new(stackX, stackTopY, stackZ) * CFrame.Angles(0, 0, math.rad(90))
+		stack.Anchored = true
+		stack.Material = Enum.Material.Metal
+		stack.Color = Color3.fromRGB(80, 80, 85)
+		stack.Parent = model
+
+		-- Smoke effect
+		local smokePoint = Instance.new("Part")
+		smokePoint.Name = "SmokePoint"
+		smokePoint.Size = Vector3.new(1, 1, 1)
+		smokePoint.Position = Vector3.new(stackX, BUILDING_BASE + bodyH + 0.8 * scale + stackH, stackZ)
+		smokePoint.Anchored = true
+		smokePoint.CanCollide = false
+		smokePoint.Transparency = 1
+		smokePoint.Parent = model
+
+		local smoke = Instance.new("Smoke")
+		smoke.Size = 8 + i * 2
+		smoke.Opacity = 0.35
+		smoke.RiseVelocity = 6
+		smoke.Color = Color3.fromRGB(160, 155, 150)
+		smoke.Parent = smokePoint
+
+		table.insert(smokeData, smokePoint)
+	end
+
+	-- Loading bay doors on front (+Z face)
+	local bayFaceZ = centerZ + bodyD / 2 + 0.15
+	for _, bayOff in ipairs({ -5 * scale, 5 * scale }) do
+		local door = Instance.new("Part")
+		door.Name = "LoadingBayDoor"
+		door.Size = Vector3.new(6 * scale, 8 * scale, 0.3 * scale)
+		door.Position = Vector3.new(centerX + bayOff, BUILDING_BASE + 4 * scale, bayFaceZ)
+		door.Anchored = true
+		door.Material = Enum.Material.SmoothPlastic
+		door.Color = Color3.fromRGB(50, 50, 55)
+		door.Parent = model
+
+		local hazardStrip = Instance.new("Part")
+		hazardStrip.Name = "HazardStrip"
+		hazardStrip.Size = Vector3.new(7 * scale, 0.6 * scale, 0.35 * scale)
+		hazardStrip.Position = Vector3.new(centerX + bayOff, BUILDING_BASE + 8.3 * scale, bayFaceZ + 0.05)
+		hazardStrip.Anchored = true
+		hazardStrip.CanCollide = false
+		hazardStrip.Material = Enum.Material.Neon
+		hazardStrip.Color = Color3.fromRGB(220, 190, 0)
+		hazardStrip.Parent = model
+	end
+
+	-- Neon sign on front (+Z)
+	local signW = 14 * scale
+	local signH = 3 * scale
+	local signPart = Instance.new("Part")
+	signPart.Name = "FactorySign"
+	signPart.Size = Vector3.new(signW, signH, 0.4 * scale)
+	signPart.Position = Vector3.new(centerX, BUILDING_BASE + bodyH - 4 * scale, centerZ + bodyD / 2 + 0.3)
+	signPart.Anchored = true
+	signPart.Material = Enum.Material.Neon
+	signPart.Color = spec.signColor
+	signPart:SetAttribute("ThemeRole", "building_neon")
+	signPart:SetAttribute("BaseColor", spec.signColor)
+	signPart:SetAttribute("BaseMaterial", "Neon")
+	signPart.Parent = model
+
+	local gui = Instance.new("SurfaceGui")
+	gui.Face = Enum.NormalId.Back
+	gui.Parent = signPart
+	local txt = Instance.new("TextLabel")
+	txt.Size = UDim2.new(1, 0, 1, 0)
+	txt.BackgroundTransparency = 1
+	txt.Font = Enum.Font.GothamBold
+	txt.Text = spec.signText
+	txt.TextColor3 = Color3.new(1, 1, 1)
+	txt.TextScaled = true
+	txt.Parent = gui
+
+	local signLight = Instance.new("PointLight")
+	signLight.Brightness = 1.5
+	signLight.Range = 16
+	signLight.Color = spec.signColor
+	signLight.Parent = signPart
+
+	-- Cargo containers (+X side)
+	local containerBaseX = centerX + bodyW / 2 + 3 * scale
+	for i, cSpec in ipairs(spec.containers) do
+		local cW = cSpec.w * scale
+		local cH = 5 * scale
+		local cD = 5 * scale
+		local cX = containerBaseX
+		local cZ = centerZ + bodyD / 2 - 6 * scale - (i - 1) * 6 * scale
+		local cY = BUILDING_BASE + cH / 2
+		if i == 3 then
+			cZ = centerZ + bodyD / 2 - 6 * scale
+			cY = BUILDING_BASE + cH + cH / 2
+		end
+
+		local container = Instance.new("Part")
+		container.Name = "CargoContainer"
+		container.Size = Vector3.new(cW, cH, cD)
+		container.Position = Vector3.new(cX, cY, cZ)
+		container.Anchored = true
+		container.Material = Enum.Material.DiamondPlate
+		container.Color = cSpec.color
+		container.Parent = model
+
+		local ridge = Instance.new("Part")
+		ridge.Name = "ContainerRidge"
+		ridge.Size = Vector3.new(cW + 0.2, 0.4 * scale, cD + 0.2)
+		ridge.Position = Vector3.new(cX, cY + cH / 2 + 0.2 * scale, cZ)
+		ridge.Anchored = true
+		ridge.Material = Enum.Material.Metal
+		ridge.Color = Color3.fromRGB(60, 60, 65)
+		ridge.Parent = model
+	end
+
+	-- Windows on all 4 faces (small, sparse, industrial)
+	local litColor = Color3.fromRGB(200, 170, 80)
+	addWindowsToFace(model, "z", centerZ + bodyD / 2 + 0.05, centerX, bodyW, BUILDING_BASE, 3, bodyH / 3, 2.0, 1.8, 3.0, litColor, 0.25)
+	addWindowsToFace(model, "z", centerZ - bodyD / 2 - 0.05, centerX, bodyW, BUILDING_BASE, 3, bodyH / 3, 2.0, 1.8, 3.0, litColor, 0.15)
+	addWindowsToFace(model, "x", centerX + bodyW / 2 + 0.05, centerZ, bodyD, BUILDING_BASE, 3, bodyH / 3, 2.0, 1.8, 3.0, litColor, 0.20)
+	addWindowsToFace(model, "x", centerX - bodyW / 2 - 0.05, centerZ, bodyD, BUILDING_BASE, 3, bodyH / 3, 2.0, 1.8, 3.0, litColor, 0.20)
+
+	if options.parent then
+		model.Parent = options.parent
+	end
+
+	return model, { smokePoints = smokeData }
+end
+
+function AssetLibrary.getFactoryVariants()
+	return { "industrial", "factory" }
+end
+
 return AssetLibrary
