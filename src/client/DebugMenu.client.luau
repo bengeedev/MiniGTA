@@ -161,15 +161,24 @@ end
 addSectionLabel("TELEPORT")
 
 local DISTRICTS = {
-	{ name = "Downtown",    col = 3.5, row = 2.5 },
-	{ name = "Commercial",  col = 1,   row = 2.5 },
-	{ name = "Residential", col = 6,   row = 2.5 },
-	{ name = "Industrial",  col = 4,   row = 0.5 },
-	{ name = "Airport",     col = 1,   row = 0.5 },
-	{ name = "Military",    col = 7,   row = 0.5 },
-	{ name = "Harbor",      col = 1,   row = 4.5 },
-	{ name = "Waterfront",  col = 4,   row = 4.5 },
-	{ name = "Beach",       col = 7,   row = 4.5 },
+	-- Central band (rows 3-6)
+	{ name = "Downtown",    col = 5.5,  row = 5 },
+	{ name = "Commercial",  col = 1.5,  row = 5 },
+	{ name = "Government",  col = 9,    row = 5 },
+	{ name = "Prison",      col = 11,   row = 5 },
+	{ name = "Residential", col = 13,   row = 5 },
+	-- North band (rows 0-2)
+	{ name = "Airport",     col = 1.5,  row = 1.5 },
+	{ name = "Industrial",  col = 5,    row = 1.5 },
+	{ name = "Power Plant", col = 8.5,  row = 1.5 },
+	{ name = "Military",    col = 11,   row = 1.5 },
+	{ name = "Nuclear",     col = 13,   row = 1.5 },
+	-- South band (rows 7-9)
+	{ name = "Harbor",      col = 1.5,  row = 8.5 },
+	{ name = "Water Plant", col = 4.5,  row = 8.5 },
+	{ name = "Waterfront",  col = 7.5,  row = 8.5 },
+	{ name = "Beach",       col = 10.5, row = 8.5 },
+	{ name = "Space",       col = 13,   row = 8.5 },
 }
 
 local districtIndex = 1
