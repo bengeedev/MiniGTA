@@ -2485,4 +2485,253 @@ function AssetLibrary.createHoodBuilding(centerX, centerZ, options)
 	return shopModel
 end
 
+--------------------------------------------------------------------------------
+-- MIAMI BUILDING SPECS
+-- Art Deco pastel buildings: 6 palette variants
+-- Each: 4-floor main body + 2-floor central tower + neon accent strips
+--------------------------------------------------------------------------------
+
+local MIAMI_PALETTES = {
+	{ name = "pink",     body = Color3.fromRGB(230, 180, 180), trim = Color3.fromRGB(255, 255, 255), neon = Color3.fromRGB(255, 180, 100) },
+	{ name = "mint",     body = Color3.fromRGB(170, 220, 200), trim = Color3.fromRGB(255, 255, 255), neon = Color3.fromRGB(100, 255, 200) },
+	{ name = "cream",    body = Color3.fromRGB(240, 230, 190), trim = Color3.fromRGB(255, 255, 255), neon = Color3.fromRGB(255, 220, 130) },
+	{ name = "coral",    body = Color3.fromRGB(220, 170, 160), trim = Color3.fromRGB(255, 255, 255), neon = Color3.fromRGB(255, 140, 100) },
+	{ name = "lavender", body = Color3.fromRGB(200, 190, 230), trim = Color3.fromRGB(255, 255, 255), neon = Color3.fromRGB(180, 140, 255) },
+	{ name = "blue",     body = Color3.fromRGB(180, 210, 240), trim = Color3.fromRGB(255, 255, 255), neon = Color3.fromRGB(100, 200, 255) },
+}
+
+--------------------------------------------------------------------------------
+-- createMiamiBuilding(centerX, centerZ, options)
+-- options.palette: 1-6 or palette name string (default random)
+-- options.scale: number (default 1)
+-- options.parent: Instance to parent to
+-- Returns: Model
+--------------------------------------------------------------------------------
+
+function AssetLibrary.createMiamiBuilding(centerX, centerZ, options)
+	options = options or {}
+	local scale = options.scale or 1
+
+	-- Resolve palette
+	local paletteIndex
+	if type(options.palette) == "number" then
+		paletteIndex = math.clamp(options.palette, 1, #MIAMI_PALETTES)
+	elseif type(options.palette) == "string" then
+		for i, p in ipairs(MIAMI_PALETTES) do
+			if p.name == options.palette then paletteIndex = i; break end
+		end
+		paletteIndex = paletteIndex or math.random(1, #MIAMI_PALETTES)
+	else
+		paletteIndex = math.random(1, #MIAMI_PALETTES)
+	end
+	local palette = MIAMI_PALETTES[paletteIndex]
+
+	-- Dimensions
+	local bodyW = 18 * scale
+	local bodyD = 12 * scale
+	local floorH = 4 * scale
+	local mainFloors = 4
+	local towerFloors = 2
+	local mainH = mainFloors * floorH
+	local towerW = 8 * scale
+	local towerH = towerFloors * floorH
+	local totalH = mainH + towerH
+
+	local model = Instance.new("Model")
+	model.Name = "MiamiBuilding"
+
+	-- Main body
+	local body = Instance.new("Part")
+	body.Name = "Body"
+	body.Size = Vector3.new(bodyW, mainH, bodyD)
+	body.Position = Vector3.new(centerX, BUILDING_BASE + mainH / 2, centerZ)
+	body.Anchored = true
+	body.CanCollide = true
+	body.Material = Enum.Material.Concrete
+	body.Color = palette.body
+	body:SetAttribute("ThemeRole", "building_body")
+	body:SetAttribute("BaseColor", palette.body)
+	body:SetAttribute("BaseMaterial", "Concrete")
+	body.Parent = model
+
+	-- Central tower
+	local tower = Instance.new("Part")
+	tower.Name = "Tower"
+	tower.Size = Vector3.new(towerW, towerH, bodyD * 0.7)
+	tower.Position = Vector3.new(centerX, BUILDING_BASE + mainH + towerH / 2, centerZ)
+	tower.Anchored = true
+	tower.CanCollide = true
+	tower.Material = Enum.Material.Concrete
+	tower.Color = palette.body
+	tower:SetAttribute("ThemeRole", "building_body")
+	tower:SetAttribute("BaseColor", palette.body)
+	tower:SetAttribute("BaseMaterial", "Concrete")
+	tower.Parent = model
+
+	-- Tower cap
+	local cap = Instance.new("Part")
+	cap.Name = "TowerCap"
+	cap.Size = Vector3.new(towerW + 1 * scale, 0.6 * scale, bodyD * 0.7 + 1 * scale)
+	cap.Position = Vector3.new(centerX, BUILDING_BASE + totalH + 0.3 * scale, centerZ)
+	cap.Anchored = true
+	cap.CanCollide = false
+	cap.Material = Enum.Material.Concrete
+	cap.Color = palette.trim
+	cap.Parent = model
+
+	-- Roof parapets (left and right wings)
+	for _, side in ipairs({ -1, 1 }) do
+		local wingW = (bodyW - towerW) / 2
+		local wingX = centerX + side * (towerW / 2 + wingW / 2)
+		local parapet = Instance.new("Part")
+		parapet.Name = "Parapet"
+		parapet.Size = Vector3.new(wingW, 0.8 * scale, bodyD)
+		parapet.Position = Vector3.new(wingX, BUILDING_BASE + mainH + 0.4 * scale, centerZ)
+		parapet.Anchored = true
+		parapet.CanCollide = false
+		parapet.Material = Enum.Material.Concrete
+		parapet.Color = palette.trim
+		parapet.Parent = model
+	end
+
+	-- Neon accent strips — all 4 faces of main body
+	for _, faceData in ipairs({
+		{ axis = "z", coord = centerZ + bodyD / 2 + 0.05, width = bodyW },
+		{ axis = "z", coord = centerZ - bodyD / 2 - 0.05, width = bodyW },
+		{ axis = "x", coord = centerX + bodyW / 2 + 0.05, width = bodyD },
+		{ axis = "x", coord = centerX - bodyW / 2 - 0.05, width = bodyD },
+	}) do
+		for floor = 1, mainFloors do
+			local stripY = BUILDING_BASE + floor * floorH
+			local strip = Instance.new("Part")
+			strip.Name = "NeonStrip"
+			if faceData.axis == "z" then
+				strip.Size = Vector3.new(faceData.width + 0.4 * scale, 0.25 * scale, 0.15)
+				strip.Position = Vector3.new(centerX, stripY, faceData.coord)
+			else
+				strip.Size = Vector3.new(0.15, 0.25 * scale, faceData.width + 0.4 * scale)
+				strip.Position = Vector3.new(faceData.coord, stripY, centerZ)
+			end
+			strip.Anchored = true
+			strip.CanCollide = false
+			strip.Material = Enum.Material.Neon
+			strip.Color = palette.neon
+			strip:SetAttribute("ThemeRole", "building_neon")
+			strip:SetAttribute("BaseColor", palette.neon)
+			strip:SetAttribute("BaseMaterial", "Neon")
+			strip.Parent = model
+		end
+	end
+
+	-- Tower neon strips (front + back only)
+	for _, faceData in ipairs({
+		{ axis = "z", coord = centerZ + bodyD / 2 + 0.05, width = towerW },
+		{ axis = "z", coord = centerZ - bodyD / 2 - 0.05, width = towerW },
+	}) do
+		for floor = 1, towerFloors do
+			local stripY = BUILDING_BASE + mainH + floor * floorH
+			local strip = Instance.new("Part")
+			strip.Name = "NeonStrip"
+			strip.Size = Vector3.new(faceData.width + 0.4 * scale, 0.25 * scale, 0.15)
+			strip.Position = Vector3.new(centerX, stripY, faceData.coord)
+			strip.Anchored = true
+			strip.CanCollide = false
+			strip.Material = Enum.Material.Neon
+			strip.Color = palette.neon
+			strip:SetAttribute("ThemeRole", "building_neon")
+			strip:SetAttribute("BaseColor", palette.neon)
+			strip:SetAttribute("BaseMaterial", "Neon")
+			strip.Parent = model
+		end
+	end
+
+	-- Vertical neon pillars on tower edges (front + back)
+	for _, faceZ in ipairs({ centerZ + bodyD / 2 + 0.05, centerZ - bodyD / 2 - 0.05 }) do
+		for _, side in ipairs({ -1, 1 }) do
+			local pillar = Instance.new("Part")
+			pillar.Name = "NeonPillar"
+			pillar.Size = Vector3.new(0.3 * scale, totalH, 0.3 * scale)
+			pillar.Position = Vector3.new(centerX + side * towerW / 2, BUILDING_BASE + totalH / 2, faceZ)
+			pillar.Anchored = true
+			pillar.CanCollide = false
+			pillar.Material = Enum.Material.Neon
+			pillar.Color = palette.neon
+			pillar:SetAttribute("ThemeRole", "building_neon")
+			pillar:SetAttribute("BaseColor", palette.neon)
+			pillar:SetAttribute("BaseMaterial", "Neon")
+			pillar.Parent = model
+
+			local cornerPillar = Instance.new("Part")
+			cornerPillar.Name = "NeonCorner"
+			cornerPillar.Size = Vector3.new(0.3 * scale, mainH, 0.3 * scale)
+			cornerPillar.Position = Vector3.new(centerX + side * bodyW / 2, BUILDING_BASE + mainH / 2, faceZ)
+			cornerPillar.Anchored = true
+			cornerPillar.CanCollide = false
+			cornerPillar.Material = Enum.Material.Neon
+			cornerPillar.Color = palette.neon
+			cornerPillar:SetAttribute("ThemeRole", "building_neon")
+			cornerPillar:SetAttribute("BaseColor", palette.neon)
+			cornerPillar:SetAttribute("BaseMaterial", "Neon")
+			cornerPillar.Parent = model
+		end
+	end
+
+	-- Entrance (front +Z)
+	local entranceW = 4 * scale
+	local entranceH = floorH * 0.85
+	local entrance = Instance.new("Part")
+	entrance.Name = "Entrance"
+	entrance.Size = Vector3.new(entranceW, entranceH, 0.4)
+	entrance.Position = Vector3.new(centerX, BUILDING_BASE + entranceH / 2, centerZ + bodyD / 2 + 0.15)
+	entrance.Anchored = true
+	entrance.CanCollide = false
+	entrance.Material = Enum.Material.Glass
+	entrance.Color = Color3.fromRGB(40, 60, 80)
+	entrance.Transparency = 0.3
+	entrance.Parent = model
+
+	-- Windows on all 4 faces (main body)
+	local litColor = Color3.fromRGB(255, 240, 200)
+	local winW = 2.0 * scale
+	local winH = 2.5 * scale
+	local winGap = 1.5 * scale
+
+	-- Front (+Z)
+	addWindowsToFace(model, "z", centerZ + bodyD / 2 + 0.05, centerX, bodyW, BUILDING_BASE,
+		mainFloors, floorH, winW, winH, winGap, litColor, 0.6)
+	-- Back (-Z)
+	addWindowsToFace(model, "z", centerZ - bodyD / 2 - 0.05, centerX, bodyW, BUILDING_BASE,
+		mainFloors, floorH, winW, winH, winGap, litColor, 0.35)
+	-- Left (-X)
+	addWindowsToFace(model, "x", centerX - bodyW / 2 - 0.05, centerZ, bodyD, BUILDING_BASE,
+		mainFloors, floorH, winW, winH, winGap, litColor, 0.45)
+	-- Right (+X)
+	addWindowsToFace(model, "x", centerX + bodyW / 2 + 0.05, centerZ, bodyD, BUILDING_BASE,
+		mainFloors, floorH, winW, winH, winGap, litColor, 0.45)
+
+	-- Tower windows (front + back)
+	addWindowsToFace(model, "z", centerZ + bodyD / 2 + 0.05, centerX, towerW, BUILDING_BASE + mainH,
+		towerFloors, floorH, winW, winH, winGap, litColor, 0.7)
+	addWindowsToFace(model, "z", centerZ - bodyD / 2 - 0.05, centerX, towerW, BUILDING_BASE + mainH,
+		towerFloors, floorH, winW, winH, winGap, litColor, 0.4)
+
+	model.PrimaryPart = body
+
+	if options.parent then
+		model.Parent = options.parent
+	end
+
+	return model
+end
+
+function AssetLibrary.getMiamiPalettes()
+	local names = {}
+	for _, p in ipairs(MIAMI_PALETTES) do table.insert(names, p.name) end
+	return names
+end
+
+function AssetLibrary.getMiamiPaletteCount()
+	return #MIAMI_PALETTES
+end
+
 return AssetLibrary
