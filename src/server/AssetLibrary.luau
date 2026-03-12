@@ -3206,4 +3206,154 @@ function AssetLibrary.createGlassCubeStore(centerX, centerZ, options)
 	return model
 end
 
+--------------------------------------------------------------------------------
+-- createParkingGarage(centerX, centerZ, options)
+-- Multi-level concrete parking structure: 3 floors, open-air with columns,
+-- half-walls, ramps between floors, PARKING sign on front (+Z).
+-- 40W × 34D studs.
+-- options.scale: number (default 1)
+-- options.parent: Instance to parent to
+-- Returns: Model
+--------------------------------------------------------------------------------
+
+function AssetLibrary.createParkingGarage(centerX, centerZ, options)
+	options = options or {}
+	local scale = options.scale or 1
+
+	local model = Instance.new("Model")
+	model.Name = "ParkingGarage"
+
+	local garageW = 40 * scale
+	local garageD = 34 * scale
+	local floors = 3
+	local floorH = 8 * scale
+	local totalH = floors * floorH
+
+	-- Floor slabs (ground + each level + roof)
+	for f = 0, floors do
+		local slabY = BUILDING_BASE + f * floorH
+		local slab = Instance.new("Part")
+		slab.Name = "GarageFloor_" .. f
+		slab.Size = Vector3.new(garageW, 0.6, garageD)
+		slab.Position = Vector3.new(centerX, slabY, centerZ)
+		slab.Anchored = true
+		slab.Material = Enum.Material.Concrete
+		slab.Color = Color3.fromRGB(140, 135, 130)
+		slab:SetAttribute("ThemeRole", "building_body")
+		slab:SetAttribute("BaseColor", slab.Color)
+		slab:SetAttribute("BaseMaterial", "Concrete")
+		slab.Parent = model
+	end
+
+	-- Columns (4×4 grid)
+	local colSpacingX = garageW / 3
+	local colSpacingZ = garageD / 3
+	for ix = 0, 3 do
+		for iz = 0, 3 do
+			local colX = centerX - garageW / 2 + ix * colSpacingX
+			local colZ = centerZ - garageD / 2 + iz * colSpacingZ
+			local col = Instance.new("Part")
+			col.Name = "GarageColumn"
+			col.Size = Vector3.new(1.2 * scale, totalH, 1.2 * scale)
+			col.Position = Vector3.new(colX, BUILDING_BASE + totalH / 2, colZ)
+			col.Anchored = true
+			col.Material = Enum.Material.Concrete
+			col.Color = Color3.fromRGB(160, 155, 150)
+			col.Parent = model
+		end
+	end
+
+	-- Half-walls on all 4 edges per floor
+	for f = 0, floors - 1 do
+		local wallY = BUILDING_BASE + f * floorH + floorH * 0.3
+		local wallH = floorH * 0.4
+
+		-- Front (+Z) — low barrier
+		local front = Instance.new("Part")
+		front.Name = "GarageWall"
+		front.Size = Vector3.new(garageW, wallH, 0.5)
+		front.Position = Vector3.new(centerX, wallY, centerZ + garageD / 2)
+		front.Anchored = true
+		front.Material = Enum.Material.Concrete
+		front.Color = Color3.fromRGB(130, 125, 120)
+		front.Parent = model
+
+		-- Back (-Z) — full height
+		local back = Instance.new("Part")
+		back.Name = "GarageWall"
+		back.Size = Vector3.new(garageW, floorH, 0.5)
+		back.Position = Vector3.new(centerX, BUILDING_BASE + f * floorH + floorH / 2, centerZ - garageD / 2)
+		back.Anchored = true
+		back.Material = Enum.Material.Concrete
+		back.Color = Color3.fromRGB(120, 115, 110)
+		back.Parent = model
+
+		-- Side walls
+		for _, s in ipairs({ -1, 1 }) do
+			local sideWall = Instance.new("Part")
+			sideWall.Name = "GarageWall"
+			sideWall.Size = Vector3.new(0.5, wallH, garageD)
+			sideWall.Position = Vector3.new(centerX + s * garageW / 2, wallY, centerZ)
+			sideWall.Anchored = true
+			sideWall.Material = Enum.Material.Concrete
+			sideWall.Color = Color3.fromRGB(130, 125, 120)
+			sideWall.Parent = model
+		end
+	end
+
+	-- Ramps between floors (along back -Z side)
+	local rampW = 8 * scale
+	local rampLen = garageD * 0.8
+	for f = 0, floors - 2 do
+		local rampStartY = BUILDING_BASE + f * floorH + 0.3
+		local rampEndY = BUILDING_BASE + (f + 1) * floorH + 0.3
+		local rampMidY = (rampStartY + rampEndY) / 2
+		local rampAngle = math.atan2(floorH, rampLen)
+		local rampHyp = math.sqrt(rampLen * rampLen + floorH * floorH)
+
+		local ramp = Instance.new("Part")
+		ramp.Name = "GarageRamp"
+		ramp.Size = Vector3.new(rampW, 0.5, rampHyp)
+		local rampX = centerX - garageW / 2 + rampW / 2 + 2
+		local rampSign = (f % 2 == 0) and 1 or -1
+		ramp.CFrame = CFrame.new(rampX, rampMidY, centerZ + rampSign * 2)
+			* CFrame.Angles(rampSign * rampAngle, 0, 0)
+		ramp.Anchored = true
+		ramp.Material = Enum.Material.Concrete
+		ramp.Color = Color3.fromRGB(150, 145, 140)
+		ramp.Parent = model
+	end
+
+	-- PARKING sign on front (+Z face)
+	local signPart = Instance.new("Part")
+	signPart.Name = "ParkingSign"
+	signPart.Size = Vector3.new(12 * scale, 3 * scale, 0.5)
+	signPart.Position = Vector3.new(centerX, BUILDING_BASE + totalH - 2, centerZ + garageD / 2 + 0.3)
+	signPart.Anchored = true
+	signPart.Material = Enum.Material.Neon
+	signPart.Color = Color3.fromRGB(50, 200, 255)
+	signPart:SetAttribute("ThemeRole", "building_neon")
+	signPart:SetAttribute("BaseColor", signPart.Color)
+	signPart:SetAttribute("BaseMaterial", "Neon")
+	signPart.Parent = model
+
+	local gui = Instance.new("SurfaceGui")
+	gui.Face = Enum.NormalId.Back
+	gui.Parent = signPart
+	local txt = Instance.new("TextLabel")
+	txt.Size = UDim2.new(1, 0, 1, 0)
+	txt.BackgroundTransparency = 1
+	txt.Font = Enum.Font.GothamBold
+	txt.Text = "PARKING"
+	txt.TextColor3 = Color3.new(1, 1, 1)
+	txt.TextScaled = true
+	txt.Parent = gui
+
+	if options.parent then
+		model.Parent = options.parent
+	end
+
+	return model
+end
+
 return AssetLibrary
