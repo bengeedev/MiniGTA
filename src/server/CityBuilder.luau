@@ -14,6 +14,7 @@ local RailwayCrossing = require(script.Parent:WaitForChild("DecorCreation"):Wait
 local WaterBridge = require(script.Parent:WaitForChild("DecorCreation"):WaitForChild("decor"):WaitForChild("WaterBridge"))
 local TrafficLightBuilder = require(script.Parent:WaitForChild("DecorCreation"):WaitForChild("decor"):WaitForChild("TrafficLight"))
 local RoadNetwork = require(script.Parent:WaitForChild("RoadNetwork"))
+local AssetLibrary = require(script.Parent:WaitForChild("AssetLibrary"))
 
 local CityBuilder = {}
 local Terrain = Workspace.Terrain
@@ -645,6 +646,79 @@ local function placeTrafficLights()
 end
 
 --------------------------------------------------------------------------------
+-- 6. POPULATE BLOCKS (place buildings from AssetLibrary)
+--------------------------------------------------------------------------------
+
+local function populateBlocks()
+	local hLanes = GTAConfig.H_LANES
+	local vLanes = GTAConfig.V_LANES
+	local buildingCount = 0
+	local MARGIN = 10 -- inset from block edge for building placement
+
+	for i = 1, #hLanes - 1 do
+		local topH = hLanes[i]
+		local botH = hLanes[i + 1]
+		local topZ = GTAConfig.getRowEdgeZ(topH.row) + getLaneWidth(topH.type) / 2
+		local botZ = GTAConfig.getRowEdgeZ(botH.row) - getLaneWidth(botH.type) / 2
+		local bandD = botZ - topZ
+		if bandD <= 0 then continue end
+		local bandCZ = (topZ + botZ) / 2
+
+		for j = 1, #vLanes - 1 do
+			local leftV = vLanes[j]
+			local rightV = vLanes[j + 1]
+			local leftX  = GTAConfig.getColEdgeX(leftV.col) + getLaneWidth(leftV.type) / 2
+			local rightX = GTAConfig.getColEdgeX(rightV.col) - getLaneWidth(rightV.type) / 2
+			local blockW = rightX - leftX
+			if blockW <= 0 then continue end
+			local blockCX = (leftX + rightX) / 2
+
+			if GTAConfig.isInsideCompound(blockCX, bandCZ) then continue end
+
+			local dist = getDistrictAt(blockCX, bandCZ)
+
+			-- Available space for building placement
+			local usableW = blockW - MARGIN * 2
+			local usableD = bandD - MARGIN * 2
+			if usableW < 20 or usableD < 20 then continue end
+
+			----------------------------------------------------------------
+			-- DOWNTOWN: skyscrapers
+			----------------------------------------------------------------
+			if dist == "downtown" then
+				local styles = { "glass", "glass", "warm", "neon" } -- weighted toward glass
+				local bDepth = 20  -- base depth per skyscraper
+
+				-- How many skyscrapers fit along X?
+				local gap = 2
+				local numX = math.max(1, math.floor((usableW + gap) / (bDepth + gap)))
+				local totalW = numX * bDepth + (numX - 1) * gap
+				local startX = blockCX - totalW / 2 + bDepth / 2
+
+				for bx = 1, numX do
+					local cx = startX + (bx - 1) * (bDepth + gap)
+					local style = styles[math.random(1, #styles)]
+					local specIdx = math.random(1, AssetLibrary.getSkyscraperCount(style))
+
+					AssetLibrary.createSkyscraper(cx, bandCZ, {
+						style = style,
+						specIndex = specIdx,
+						scale = 1,
+						depth = bDepth,
+						parent = DecorUtils.decorFolder,
+					})
+					buildingCount += 1
+				end
+			end
+
+			-- (other districts will be added as we extract more assets)
+		end
+	end
+
+	print("[CityBuilder] Buildings placed:", buildingCount)
+end
+
+--------------------------------------------------------------------------------
 -- PUBLIC API
 --------------------------------------------------------------------------------
 
@@ -664,6 +738,7 @@ function CityBuilder.build(decorFolderRef, vehicleFolderRef, npcFolderRef)
 	buildWaterChannel()
 	RoadNetwork.build()
 	placeTrafficLights()
+	populateBlocks()
 
 	print("[CityBuilder] === City complete! ===")
 end
