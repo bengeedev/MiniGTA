@@ -3916,4 +3916,182 @@ function AssetLibrary.getFactoryVariants()
 	return { "industrial", "factory" }
 end
 
+--------------------------------------------------------------------------------
+-- OFFICE BUILDING WALL COLORS (inlined from DecorUtils)
+--------------------------------------------------------------------------------
+
+local OFFICE_WALL_COLORS = {
+	Color3.fromRGB(200, 190, 170), Color3.fromRGB(180, 170, 155),
+	Color3.fromRGB(165, 120, 90),  Color3.fromRGB(210, 200, 185),
+	Color3.fromRGB(155, 145, 135), Color3.fromRGB(190, 140, 100),
+	Color3.fromRGB(220, 215, 205), Color3.fromRGB(145, 100, 80),
+}
+
+local OFFICE_WINDOW_COLORS = {
+	Color3.fromRGB(255, 220, 140), Color3.fromRGB(200, 230, 255),
+	Color3.fromRGB(255, 200, 100), Color3.fromRGB(180, 210, 255),
+	Color3.fromRGB(255, 180, 120),
+}
+
+--------------------------------------------------------------------------------
+-- createOffice(centerX, centerZ, options)
+-- Mid-rise office (4-8 floors) with glass floor strips on all faces.
+-- options.variant: "office" or "tower" (default "office")
+--   office: 4-8 floors, 5.5 stud floor height, SmoothPlastic, glass strips
+--   tower: 10-18 floors, 4.5 stud floor height, Metal, full windows + antenna
+-- options.facadeWidth: studs (default random 18-26 office, 10-16 tower)
+-- options.depth: studs (default random 14-20 office, 10-16 tower)
+-- options.floors: number (default random per variant)
+-- options.scale: number (default 1)
+-- options.parent: Instance to parent to
+-- Returns: Model
+--------------------------------------------------------------------------------
+
+function AssetLibrary.createOffice(centerX, centerZ, options)
+	options = options or {}
+	local scale = options.scale or 1
+	local variant = options.variant or "office"
+	local isTower = variant == "tower"
+
+	local wallColor = pickRandom(OFFICE_WALL_COLORS)
+	local windowColor = pickRandom(OFFICE_WINDOW_COLORS)
+
+	local facadeLen, bDepth, floors, floorHeight, bodyMat
+
+	if isTower then
+		facadeLen = (options.facadeWidth or math.random(10, 16)) * scale
+		bDepth = (options.depth or math.random(10, 16)) * scale
+		floors = options.floors or math.random(10, 18)
+		floorHeight = 4.5 * scale
+		bodyMat = Enum.Material.Metal
+	else
+		facadeLen = (options.facadeWidth or math.random(18, 26)) * scale
+		bDepth = (options.depth or math.random(14, 20)) * scale
+		floors = options.floors or math.random(4, 8)
+		floorHeight = 5.5 * scale
+		bodyMat = Enum.Material.SmoothPlastic
+	end
+
+	local height = floors * floorHeight
+
+	local building = Instance.new("Model")
+	building.Name = isTower and "Building_Tower" or "Building_Office"
+
+	-- Main body: facade along X, depth along Z
+	local main = Instance.new("Part")
+	main.Name = "Body"
+	main.Size = Vector3.new(facadeLen, height, bDepth)
+	main.Position = Vector3.new(centerX, BUILDING_BASE + height / 2, centerZ)
+	main.Anchored = true
+	main.Material = bodyMat
+	main.Color = wallColor
+	main:SetAttribute("ThemeRole", "building_body")
+	main:SetAttribute("BaseColor", wallColor)
+	main:SetAttribute("BaseMaterial", bodyMat.Name)
+	main.Parent = building
+
+	if isTower then
+		-- Full windows on all 4 faces
+		local winW = 2 * scale
+		local winH = 2 * scale
+		local winGap = 2 * scale
+		local litChance = 0.7
+
+		addWindowsToFace(building, "z", centerZ + bDepth / 2 + 0.2, centerX, facadeLen, BUILDING_BASE, floors, floorHeight, winW, winH, winGap, windowColor, litChance)
+		addWindowsToFace(building, "z", centerZ - bDepth / 2 - 0.2, centerX, facadeLen, BUILDING_BASE, floors, floorHeight, winW, winH, winGap, windowColor, litChance)
+		addWindowsToFace(building, "x", centerX + facadeLen / 2 + 0.2, centerZ, bDepth, BUILDING_BASE, floors, floorHeight, winW, winH, winGap, windowColor, litChance)
+		addWindowsToFace(building, "x", centerX - facadeLen / 2 - 0.2, centerZ, bDepth, BUILDING_BASE, floors, floorHeight, winW, winH, winGap, windowColor, litChance)
+
+		-- Antenna
+		local antenna = Instance.new("Part")
+		antenna.Name = "Antenna"
+		antenna.Size = Vector3.new(0.5, 8 * scale, 0.5)
+		antenna.Position = Vector3.new(centerX, BUILDING_BASE + height + 4 * scale, centerZ)
+		antenna.Anchored = true
+		antenna.Material = Enum.Material.Metal
+		antenna.Color = Color3.fromRGB(80, 80, 85)
+		antenna.Parent = building
+
+		-- Blinking red light
+		local light = Instance.new("Part")
+		light.Name = "BeaconLight"
+		light.Size = Vector3.new(1, 1, 1)
+		light.Position = Vector3.new(centerX, BUILDING_BASE + height + 8 * scale + 0.5, centerZ)
+		light.Anchored = true
+		light.CanCollide = false
+		light.Shape = Enum.PartType.Ball
+		light.Material = Enum.Material.Neon
+		light.Color = Color3.fromRGB(255, 0, 0)
+		light.Parent = building
+	else
+		-- Glass strips on all 4 faces per floor
+		for floor = 1, floors do
+			local floorY = BUILDING_BASE + (floor - 0.5) * floorHeight
+			local isLit = math.random() >= 0.2
+
+			-- Front (+Z)
+			local stripF = Instance.new("Part")
+			stripF.Name = "GlassStrip"
+			stripF.Size = Vector3.new(facadeLen * 0.9, floorHeight * 0.5, 0.5)
+			stripF.Position = Vector3.new(centerX, floorY, centerZ + bDepth / 2 + 0.2)
+			stripF.Anchored = true
+			stripF.CanCollide = false
+			stripF.Material = isLit and Enum.Material.Neon or Enum.Material.Glass
+			stripF.Color = isLit and windowColor or Color3.fromRGB(30, 35, 45)
+			stripF:SetAttribute("ThemeRole", isLit and "building_window_lit" or "building_window")
+			stripF:SetAttribute("BaseColor", stripF.Color)
+			stripF.Parent = building
+
+			-- Back (-Z)
+			local stripB = Instance.new("Part")
+			stripB.Name = "GlassStrip"
+			stripB.Size = Vector3.new(facadeLen * 0.9, floorHeight * 0.5, 0.5)
+			stripB.Position = Vector3.new(centerX, floorY, centerZ - bDepth / 2 - 0.2)
+			stripB.Anchored = true
+			stripB.CanCollide = false
+			stripB.Material = math.random() < 0.3 and Enum.Material.Glass or Enum.Material.Neon
+			stripB.Color = stripB.Material == Enum.Material.Neon and windowColor or Color3.fromRGB(30, 35, 45)
+			stripB:SetAttribute("ThemeRole", "building_window")
+			stripB:SetAttribute("BaseColor", stripB.Color)
+			stripB.Parent = building
+
+			-- Left (-X)
+			local stripL = Instance.new("Part")
+			stripL.Name = "GlassStrip"
+			stripL.Size = Vector3.new(0.5, floorHeight * 0.5, bDepth * 0.9)
+			stripL.Position = Vector3.new(centerX - facadeLen / 2 - 0.2, floorY, centerZ)
+			stripL.Anchored = true
+			stripL.CanCollide = false
+			stripL.Material = math.random() < 0.4 and Enum.Material.Glass or Enum.Material.Neon
+			stripL.Color = stripL.Material == Enum.Material.Neon and windowColor or Color3.fromRGB(30, 35, 45)
+			stripL:SetAttribute("ThemeRole", "building_window")
+			stripL:SetAttribute("BaseColor", stripL.Color)
+			stripL.Parent = building
+
+			-- Right (+X)
+			local stripR = Instance.new("Part")
+			stripR.Name = "GlassStrip"
+			stripR.Size = Vector3.new(0.5, floorHeight * 0.5, bDepth * 0.9)
+			stripR.Position = Vector3.new(centerX + facadeLen / 2 + 0.2, floorY, centerZ)
+			stripR.Anchored = true
+			stripR.CanCollide = false
+			stripR.Material = math.random() < 0.4 and Enum.Material.Glass or Enum.Material.Neon
+			stripR.Color = stripR.Material == Enum.Material.Neon and windowColor or Color3.fromRGB(30, 35, 45)
+			stripR:SetAttribute("ThemeRole", "building_window")
+			stripR:SetAttribute("BaseColor", stripR.Color)
+			stripR.Parent = building
+		end
+	end
+
+	if options.parent then
+		building.Parent = options.parent
+	end
+
+	return building
+end
+
+function AssetLibrary.getOfficeVariants()
+	return { "office", "tower" }
+end
+
 return AssetLibrary
