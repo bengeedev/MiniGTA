@@ -736,47 +736,47 @@ local function populateCompounds()
 		--------------------------------------------------------------------
 		-- NUCLEAR
 		--------------------------------------------------------------------
-		if rect.name == "nuclear" then
-			-- Concrete pad over bumpy terrain so buildings don't sink
+		------------------------------------------------------------
+		-- Shared compound helpers
+		------------------------------------------------------------
+
+		-- Concrete pad to cover bumpy terrain
+		local function makeCompoundPad(padColor, padMat)
 			local padH = 1.5
-			local padY = GROUND_Y + 3  -- raised well above bumpy Ground terrain
+			local padY = GROUND_Y + 3
 			local pad = Instance.new("Part")
 			pad.Name = "CompoundPad"
 			pad.Size = Vector3.new(w - 4, padH, d - 4)
 			pad.Position = Vector3.new(cx, padY + padH / 2, cz)
 			pad.Anchored = true
-			pad.Material = Enum.Material.Concrete
-			pad.Color = Color3.fromRGB(80, 85, 80)
+			pad.Material = padMat or Enum.Material.Concrete
+			pad.Color = padColor or Color3.fromRGB(80, 85, 80)
 			pad.Parent = folder
+			return padY + padH  -- top of pad = baseY
+		end
 
-			local baseY = padY + padH  -- top of pad = building base
-
-			-- Main plant centered in compound
-			local plantModel, animData = AssetLibrary.createNuclearPlant(cx, cz, {
-				parent = folder,
-				scale = 1,
-				baseY = baseY,
-			})
-
-			-- Perimeter chain-link fence around the compound
-			local fenceH = 5
-			local fenceColor = Color3.fromRGB(130, 130, 135)
-			local postColor = Color3.fromRGB(110, 110, 115)
-			local margin = 5 -- inset from compound edge
+		-- Perimeter fence with posts
+		local function makePerimeterFence(baseY, opts)
+			opts = opts or {}
+			local fenceH = opts.height or 5
+			local fenceColor = opts.color or Color3.fromRGB(130, 130, 135)
+			local postColor = opts.postColor or Color3.fromRGB(110, 110, 115)
+			local margin = opts.margin or 5
+			local transp = opts.transparency or 0.3
+			local postSpacing = opts.postSpacing or 20
 
 			local fx1 = rect.x1 + margin
 			local fx2 = rect.x2 - margin
 			local fz1 = rect.z1 + margin
 			local fz2 = rect.z2 - margin
 
-			-- 4 fence segments
-			local fenceSegments = {
-				{ size = Vector3.new(fx2 - fx1, fenceH, 0.3), pos = Vector3.new(cx, baseY + fenceH / 2, fz1) },         -- north
-				{ size = Vector3.new(fx2 - fx1, fenceH, 0.3), pos = Vector3.new(cx, baseY + fenceH / 2, fz2) },         -- south
-				{ size = Vector3.new(0.3, fenceH, fz2 - fz1), pos = Vector3.new(fx1, baseY + fenceH / 2, cz) },         -- west
-				{ size = Vector3.new(0.3, fenceH, fz2 - fz1), pos = Vector3.new(fx2, baseY + fenceH / 2, cz) },         -- east
+			local segments = {
+				{ size = Vector3.new(fx2 - fx1, fenceH, 0.3), pos = Vector3.new(cx, baseY + fenceH / 2, fz1) },
+				{ size = Vector3.new(fx2 - fx1, fenceH, 0.3), pos = Vector3.new(cx, baseY + fenceH / 2, fz2) },
+				{ size = Vector3.new(0.3, fenceH, fz2 - fz1), pos = Vector3.new(fx1, baseY + fenceH / 2, cz) },
+				{ size = Vector3.new(0.3, fenceH, fz2 - fz1), pos = Vector3.new(fx2, baseY + fenceH / 2, cz) },
 			}
-			for _, seg in ipairs(fenceSegments) do
+			for _, seg in ipairs(segments) do
 				local fence = Instance.new("Part")
 				fence.Name = "CompoundFence"
 				fence.Size = seg.size
@@ -784,13 +784,11 @@ local function populateCompounds()
 				fence.Anchored = true
 				fence.Material = Enum.Material.Metal
 				fence.Color = fenceColor
-				fence.Transparency = 0.3
+				fence.Transparency = transp
 				fence.Parent = folder
 			end
 
-			-- Fence posts along perimeter
-			local postSpacing = 20
-			local function addFencePosts(x1, z1, x2, z2)
+			local function addPosts(x1, z1, x2, z2)
 				local dx = x2 - x1
 				local dz = z2 - z1
 				local len = math.sqrt(dx * dx + dz * dz)
@@ -800,25 +798,26 @@ local function populateCompounds()
 					local post = Instance.new("Part")
 					post.Name = "FencePost"
 					post.Size = Vector3.new(0.5, fenceH + 1, 0.5)
-					post.Position = Vector3.new(
-						x1 + dx * t,
-						baseY + (fenceH + 1) / 2,
-						z1 + dz * t
-					)
+					post.Position = Vector3.new(x1 + dx * t, baseY + (fenceH + 1) / 2, z1 + dz * t)
 					post.Anchored = true
 					post.Material = Enum.Material.Metal
 					post.Color = postColor
 					post.Parent = folder
 				end
 			end
-			addFencePosts(fx1, fz1, fx2, fz1)  -- north
-			addFencePosts(fx1, fz2, fx2, fz2)  -- south
-			addFencePosts(fx1, fz1, fx1, fz2)  -- west
-			addFencePosts(fx2, fz1, fx2, fz2)  -- east
+			addPosts(fx1, fz1, fx2, fz1)
+			addPosts(fx1, fz2, fx2, fz2)
+			addPosts(fx1, fz1, fx1, fz2)
+			addPosts(fx2, fz1, fx2, fz2)
 
-			-- Warning signs on fence (all 4 sides)
+			return fx1, fz1, fx2, fz2, fenceH
+		end
+
+		-- Warning/info signs on fence
+		local function makeFenceSigns(baseY, fenceH, fx1, fz1, fx2, fz2, text, signColor)
 			local signW = 8
 			local signH = 2
+			signColor = signColor or Color3.fromRGB(255, 200, 0)
 			local signDefs = {
 				{ pos = Vector3.new(cx, baseY + fenceH + signH / 2 + 0.5, fz1), face = "Front" },
 				{ pos = Vector3.new(cx, baseY + fenceH + signH / 2 + 0.5, fz2), face = "Back" },
@@ -833,7 +832,7 @@ local function populateCompounds()
 				signPart.Position = sd.pos
 				signPart.Anchored = true
 				signPart.Material = Enum.Material.Neon
-				signPart.Color = Color3.fromRGB(255, 200, 0)
+				signPart.Color = signColor
 				signPart.Parent = folder
 
 				local gui = Instance.new("SurfaceGui")
@@ -843,11 +842,283 @@ local function populateCompounds()
 				local lbl = Instance.new("TextLabel")
 				lbl.Size = UDim2.new(1, 0, 1, 0)
 				lbl.BackgroundTransparency = 1
-				lbl.Text = "RESTRICTED AREA"
+				lbl.Text = text
 				lbl.TextColor3 = Color3.fromRGB(30, 30, 30)
 				lbl.TextScaled = true
 				lbl.Font = Enum.Font.GothamBold
 				lbl.Parent = gui
+			end
+		end
+
+		------------------------------------------------------------
+		-- NUCLEAR
+		------------------------------------------------------------
+		if rect.name == "nuclear" then
+			local baseY = makeCompoundPad(Color3.fromRGB(80, 85, 80))
+
+			AssetLibrary.createNuclearPlant(cx, cz, {
+				parent = folder,
+				scale = 1,
+				baseY = baseY,
+			})
+
+			local fx1, fz1, fx2, fz2, fenceH = makePerimeterFence(baseY)
+			makeFenceSigns(baseY, fenceH, fx1, fz1, fx2, fz2, "RESTRICTED AREA")
+
+			count += 1
+
+		------------------------------------------------------------
+		-- PRISON
+		------------------------------------------------------------
+		elseif rect.name == "prison" then
+			local baseY = makeCompoundPad(Color3.fromRGB(95, 90, 85))
+
+			-- Tall perimeter fence (14 studs like DashOrCrash)
+			local fx1, fz1, fx2, fz2, fenceH = makePerimeterFence(baseY, {
+				height = 14,
+				color = Color3.fromRGB(140, 140, 145),
+				postColor = Color3.fromRGB(120, 115, 110),
+				margin = 8,
+				transparency = 0.4,
+				postSpacing = 15,
+			})
+			makeFenceSigns(baseY, fenceH, fx1, fz1, fx2, fz2,
+				"FEDERAL STATE PRISON", Color3.fromRGB(255, 60, 30))
+
+			-- Guard towers at 4 corners
+			local towerW = 6
+			local towerH = 20
+			local cabinH = 5
+			local corners = {
+				{ x = fx1, z = fz1 },
+				{ x = fx2, z = fz1 },
+				{ x = fx1, z = fz2 },
+				{ x = fx2, z = fz2 },
+			}
+			for _, c in ipairs(corners) do
+				-- Tower shaft
+				local shaft = Instance.new("Part")
+				shaft.Name = "GuardTowerShaft"
+				shaft.Size = Vector3.new(towerW * 0.4, towerH, towerW * 0.4)
+				shaft.Position = Vector3.new(c.x, baseY + towerH / 2, c.z)
+				shaft.Anchored = true
+				shaft.Material = Enum.Material.Concrete
+				shaft.Color = Color3.fromRGB(130, 125, 120)
+				shaft.Parent = folder
+
+				-- Cabin
+				local cabin = Instance.new("Part")
+				cabin.Name = "GuardTowerCabin"
+				cabin.Size = Vector3.new(towerW, cabinH, towerW)
+				cabin.Position = Vector3.new(c.x, baseY + towerH + cabinH / 2, c.z)
+				cabin.Anchored = true
+				cabin.Material = Enum.Material.Concrete
+				cabin.Color = Color3.fromRGB(120, 115, 110)
+				cabin.Parent = folder
+
+				-- Cabin windows (glass)
+				for _, face in ipairs({
+					{ size = Vector3.new(towerW + 0.1, cabinH * 0.6, 0.15), pos = Vector3.new(c.x, baseY + towerH + cabinH * 0.6, c.z + towerW / 2) },
+					{ size = Vector3.new(towerW + 0.1, cabinH * 0.6, 0.15), pos = Vector3.new(c.x, baseY + towerH + cabinH * 0.6, c.z - towerW / 2) },
+					{ size = Vector3.new(0.15, cabinH * 0.6, towerW + 0.1), pos = Vector3.new(c.x + towerW / 2, baseY + towerH + cabinH * 0.6, c.z) },
+					{ size = Vector3.new(0.15, cabinH * 0.6, towerW + 0.1), pos = Vector3.new(c.x - towerW / 2, baseY + towerH + cabinH * 0.6, c.z) },
+				}) do
+					local glass = Instance.new("Part")
+					glass.Name = "TowerWindow"
+					glass.Size = face.size
+					glass.Position = face.pos
+					glass.Anchored = true
+					glass.Material = Enum.Material.Glass
+					glass.Color = Color3.fromRGB(180, 200, 210)
+					glass.Transparency = 0.4
+					glass.Parent = folder
+				end
+
+				-- Roof
+				local roof = Instance.new("Part")
+				roof.Name = "GuardTowerRoof"
+				roof.Size = Vector3.new(towerW + 2, 0.5, towerW + 2)
+				roof.Position = Vector3.new(c.x, baseY + towerH + cabinH + 0.25, c.z)
+				roof.Anchored = true
+				roof.Material = Enum.Material.Metal
+				roof.Color = Color3.fromRGB(70, 70, 75)
+				roof.Parent = folder
+
+				-- Searchlight
+				local lightPart = Instance.new("Part")
+				lightPart.Name = "Searchlight"
+				lightPart.Size = Vector3.new(1.5, 1, 1.5)
+				lightPart.Position = Vector3.new(c.x, baseY + towerH + cabinH + 1, c.z)
+				lightPart.Anchored = true
+				lightPart.Material = Enum.Material.Metal
+				lightPart.Color = Color3.fromRGB(60, 60, 65)
+				lightPart.Parent = folder
+
+				local spot = Instance.new("SpotLight")
+				spot.Face = Enum.NormalId.Bottom
+				spot.Angle = 60
+				spot.Range = 50
+				spot.Brightness = 3
+				spot.Color = Color3.fromRGB(255, 230, 180)
+				spot.Parent = lightPart
+			end
+
+			-- Prison gate on south side (+Z face, closest to central city)
+			local gateW = 16
+			local gateH = fenceH + 2
+			local gatePillarW = 2.5
+			local gateZ = fz2
+
+			for _, side in ipairs({ -1, 1 }) do
+				local pillarX = cx + side * (gateW / 2 + gatePillarW / 2)
+
+				-- Gate pillar
+				local pillar = Instance.new("Part")
+				pillar.Name = "GatePillar"
+				pillar.Size = Vector3.new(gatePillarW, gateH, gatePillarW)
+				pillar.Position = Vector3.new(pillarX, baseY + gateH / 2, gateZ)
+				pillar.Anchored = true
+				pillar.Material = Enum.Material.Concrete
+				pillar.Color = Color3.fromRGB(110, 105, 100)
+				pillar.Parent = folder
+
+				-- Warning stripes on pillar
+				for stripe = 0, 3 do
+					local stripeColor = (stripe % 2 == 0) and Color3.fromRGB(200, 180, 30) or Color3.fromRGB(180, 40, 30)
+					local sp = Instance.new("Part")
+					sp.Name = "PillarStripe"
+					sp.Size = Vector3.new(gatePillarW + 0.1, 1.2, gatePillarW + 0.1)
+					sp.Position = Vector3.new(pillarX, baseY + 2 + stripe * 2.5, gateZ)
+					sp.Anchored = true
+					sp.CanCollide = false
+					sp.Material = Enum.Material.SmoothPlastic
+					sp.Color = stripeColor
+					sp.Parent = folder
+				end
+
+				-- Security light on cap
+				local capLight = Instance.new("Part")
+				capLight.Name = "GateLight"
+				capLight.Shape = Enum.PartType.Ball
+				capLight.Size = Vector3.new(1.5, 1.5, 1.5)
+				capLight.Position = Vector3.new(pillarX, baseY + gateH + 1, gateZ)
+				capLight.Anchored = true
+				capLight.Material = Enum.Material.Neon
+				capLight.Color = Color3.fromRGB(255, 200, 120)
+				capLight.Parent = folder
+
+				local pl = Instance.new("PointLight")
+				pl.Brightness = 2
+				pl.Range = 16
+				pl.Color = Color3.fromRGB(255, 200, 120)
+				pl.Parent = capLight
+			end
+
+			-- Gate crossbar with sign
+			local crossbar = Instance.new("Part")
+			crossbar.Name = "GateCrossbar"
+			crossbar.Size = Vector3.new(gateW + gatePillarW * 2, 2, 1.5)
+			crossbar.Position = Vector3.new(cx, baseY + gateH + 0.5, gateZ)
+			crossbar.Anchored = true
+			crossbar.Material = Enum.Material.Metal
+			crossbar.Color = Color3.fromRGB(80, 80, 85)
+			crossbar.Parent = folder
+
+			local gateGui = Instance.new("SurfaceGui")
+			gateGui.Face = Enum.NormalId.Front
+			gateGui.Parent = crossbar
+
+			local gateTxt = Instance.new("TextLabel")
+			gateTxt.Size = UDim2.new(1, 0, 1, 0)
+			gateTxt.BackgroundTransparency = 1
+			gateTxt.Font = Enum.Font.GothamBold
+			gateTxt.Text = "FEDERAL STATE PRISON"
+			gateTxt.TextColor3 = Color3.fromRGB(255, 60, 30)
+			gateTxt.TextScaled = true
+			gateTxt.Parent = gateGui
+
+			-- Back face too
+			local gateGui2 = Instance.new("SurfaceGui")
+			gateGui2.Face = Enum.NormalId.Back
+			gateGui2.Parent = crossbar
+			local gateTxt2 = gateTxt:Clone()
+			gateTxt2.Parent = gateGui2
+
+			-- Cell blocks — 4 buildings arranged in the compound
+			-- Prison rect is ~320W × 680D, so we have room for a grid
+			local buildingSpots = {
+				{ x = cx - 50, z = cz - 120 },
+				{ x = cx + 50, z = cz - 120 },
+				{ x = cx - 50, z = cz + 40 },
+				{ x = cx + 50, z = cz + 40 },
+				{ x = cx,      z = cz - 40 },   -- center block
+				{ x = cx,      z = cz + 160 },   -- near gate
+			}
+			for _, spot in ipairs(buildingSpots) do
+				AssetLibrary.createPrisonBuilding(spot.x, spot.z, {
+					parent = folder,
+					scale = 1,
+					baseY = baseY,
+				})
+			end
+
+			-- Exercise yard (flat concrete area between buildings)
+			local yard = Instance.new("Part")
+			yard.Name = "ExerciseYard"
+			yard.Size = Vector3.new(80, 0.2, 60)
+			yard.Position = Vector3.new(cx, baseY + 0.1, cz - 40)
+			yard.Anchored = true
+			yard.Material = Enum.Material.Concrete
+			yard.Color = Color3.fromRGB(140, 135, 130)
+			yard.Parent = folder
+
+			-- Yard court markings
+			local marking = Instance.new("Part")
+			marking.Name = "CourtMarking"
+			marking.Size = Vector3.new(40, 0.05, 30)
+			marking.Position = Vector3.new(cx, baseY + 0.25, cz - 40)
+			marking.Anchored = true
+			marking.CanCollide = false
+			marking.Material = Enum.Material.SmoothPlastic
+			marking.Color = Color3.fromRGB(200, 200, 200)
+			marking.Transparency = 0.7
+			marking.Parent = folder
+
+			-- Floodlight poles inside compound (between buildings)
+			local floodPositions = {
+				{ x = cx - 70, z = cz - 60 },
+				{ x = cx + 70, z = cz - 60 },
+				{ x = cx - 70, z = cz + 100 },
+				{ x = cx + 70, z = cz + 100 },
+				{ x = cx,      z = cz + 80 },
+			}
+			local poleH = 16
+			for _, fp in ipairs(floodPositions) do
+				local pole = Instance.new("Part")
+				pole.Name = "FloodlightPole"
+				pole.Size = Vector3.new(0.8, poleH, 0.8)
+				pole.Position = Vector3.new(fp.x, baseY + poleH / 2, fp.z)
+				pole.Anchored = true
+				pole.Material = Enum.Material.Metal
+				pole.Color = Color3.fromRGB(90, 90, 95)
+				pole.Parent = folder
+
+				local fixture = Instance.new("Part")
+				fixture.Name = "FloodlightFixture"
+				fixture.Size = Vector3.new(2, 1, 2)
+				fixture.Position = Vector3.new(fp.x, baseY + poleH + 0.5, fp.z)
+				fixture.Anchored = true
+				fixture.Material = Enum.Material.Metal
+				fixture.Color = Color3.fromRGB(60, 60, 65)
+				fixture.Parent = folder
+
+				local spot = Instance.new("SpotLight")
+				spot.Face = Enum.NormalId.Bottom
+				spot.Angle = 70
+				spot.Range = 40
+				spot.Brightness = 2.5
+				spot.Color = Color3.fromRGB(255, 230, 180)
+				spot.Parent = fixture
 			end
 
 			count += 1

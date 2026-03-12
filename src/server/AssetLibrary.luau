@@ -4852,6 +4852,7 @@ end
 function AssetLibrary.createPrisonBuilding(centerX, centerZ, options)
 	options = options or {}
 	local scale = options.scale or 1
+	local baseY = options.baseY or BUILDING_BASE
 
 	local model = Instance.new("Model")
 	model.Name = "PrisonBuilding"
@@ -4888,17 +4889,17 @@ function AssetLibrary.createPrisonBuilding(centerX, centerZ, options)
 	-- Foundation
 	makePart("Foundation",
 		Vector3.new(buildD + 2 * scale, 1 * scale, buildW + 2 * scale),
-		CFrame.new(centerX, BUILDING_BASE + 0.5 * scale, centerZ),
+		CFrame.new(centerX, baseY + 0.5 * scale, centerZ),
 		Color3.fromRGB(160, 155, 148))
 
 	-- Main block
 	makePart("MainBlock",
 		Vector3.new(buildD, totalH, buildW),
-		CFrame.new(centerX, BUILDING_BASE + 1 * scale + totalH / 2, centerZ),
+		CFrame.new(centerX, baseY + 1 * scale + totalH / 2, centerZ),
 		palette.main)
 
 	-- Parapet
-	local roofY = BUILDING_BASE + 1 * scale + totalH
+	local roofY = baseY + 1 * scale + totalH
 	local parapetH = 1.5 * scale
 
 	for _, sx in ipairs({ -1, 1 }) do
@@ -4964,7 +4965,7 @@ function AssetLibrary.createPrisonBuilding(centerX, centerZ, options)
 	local winStartZ = centerZ - (numWins - 1) * winSpacing / 2
 
 	for story = 1, stories do
-		local winY = BUILDING_BASE + 1 * scale + (story - 0.4) * storyH
+		local winY = baseY + 1 * scale + (story - 0.4) * storyH
 		for i = 0, numWins - 1 do
 			local wz = winStartZ + i * winSpacing
 			buildWindow(centerX + halfD + 0.01, winY, wz, winW, winH, "x")
@@ -4975,7 +4976,7 @@ function AssetLibrary.createPrisonBuilding(centerX, centerZ, options)
 	local sideWins = math.max(1, math.floor(buildD / winSpacing) - 1)
 	local sideStartX = centerX - (sideWins - 1) * winSpacing / 2
 	for story = 1, stories do
-		local winY = BUILDING_BASE + 1 * scale + (story - 0.4) * storyH
+		local winY = baseY + 1 * scale + (story - 0.4) * storyH
 		for i = 0, sideWins - 1 do
 			local wx = sideStartX + i * winSpacing
 			buildWindow(wx, winY, centerZ - halfW - 0.01, winW, winH, "z")
@@ -4990,11 +4991,11 @@ function AssetLibrary.createPrisonBuilding(centerX, centerZ, options)
 		local doorX = centerX + sx * (halfD + 0.05)
 		makePart("DoorFrame",
 			Vector3.new(0.8 * scale, doorH + 0.5 * scale, doorW + 1 * scale),
-			CFrame.new(doorX, BUILDING_BASE + 1 * scale + (doorH + 0.5 * scale) / 2, centerZ),
+			CFrame.new(doorX, baseY + 1 * scale + (doorH + 0.5 * scale) / 2, centerZ),
 			palette.trim)
 		makePart("Door",
 			Vector3.new(0.4 * scale, doorH, doorW),
-			CFrame.new(doorX + sx * 0.2, BUILDING_BASE + 1 * scale + doorH / 2, centerZ),
+			CFrame.new(doorX + sx * 0.2, baseY + 1 * scale + doorH / 2, centerZ),
 			Color3.fromRGB(60, 65, 70), Enum.Material.DiamondPlate)
 	end
 
@@ -5022,7 +5023,7 @@ function AssetLibrary.createPrisonBuilding(centerX, centerZ, options)
 
 	-- Story trim lines
 	for story = 1, stories - 1 do
-		local trimY = BUILDING_BASE + 1 * scale + story * storyH
+		local trimY = baseY + 1 * scale + story * storyH
 		for _, sx in ipairs({ -1, 1 }) do
 			makePart("StoryTrim",
 				Vector3.new(0.15 * scale, 0.4 * scale, buildW + 0.1 * scale),
