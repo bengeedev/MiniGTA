@@ -6916,4 +6916,613 @@ function AssetLibrary.createPowerPlant(centerX, centerZ, options)
 	}
 end
 
+--------------------------------------------------------------------------------
+-- WATER PLANT
+-- Water treatment facility: 2 circular clarifier tanks with bubble particles
+-- and scraper arms, settling basin with water fill + catwalk + waterfall,
+-- pipe network with valves, water tower on stilts, 2 chemical tanks,
+-- control booth, flood lights, security fence. Returns animation data for
+-- clarifier arms.
+-- Options: parent, scale, variant (1 or 2)
+--------------------------------------------------------------------------------
+
+function AssetLibrary.createWaterPlant(centerX, centerZ, options)
+	options = options or {}
+	local scale = options.scale or 1
+
+	local SPECS = {
+		{
+			waterColor = Color3.fromRGB(40, 120, 200), waterGlow = Color3.fromRGB(60, 140, 220),
+			boothColor = Color3.fromRGB(200, 200, 210), signText = "AQUA WORKS",
+			signColor = Color3.fromRGB(60, 180, 255), chemLabels = { "CHLORINE", "FLUORIDE" },
+			chemColors = { Color3.fromRGB(220, 220, 60), Color3.fromRGB(180, 80, 220) },
+		},
+		{
+			waterColor = Color3.fromRGB(60, 150, 80), waterGlow = Color3.fromRGB(50, 180, 70),
+			boothColor = Color3.fromRGB(180, 180, 185), signText = "CITY WATER AUTHORITY",
+			signColor = Color3.fromRGB(80, 220, 120), chemLabels = { "ALUM", "LIME" },
+			chemColors = { Color3.fromRGB(200, 200, 200), Color3.fromRGB(230, 220, 180) },
+		},
+	}
+	local spec = SPECS[options.variant or math.random(1, 2)]
+
+	local model = Instance.new("Model")
+	model.Name = "WaterPlant"
+
+	local clarifierAnims = {}
+
+	---------------------------------------------------------------------------
+	-- Helper: create a circular clarifier tank
+	---------------------------------------------------------------------------
+	local function createClarifier(px, pz)
+		local tankDiam = 14 * scale
+		local tankH = 3 * scale
+
+		-- Dark floor disc
+		local floor = Instance.new("Part")
+		floor.Name = "ClarifierFloor"
+		floor.Shape = Enum.PartType.Cylinder
+		floor.Size = Vector3.new(0.3 * scale, tankDiam, tankDiam)
+		floor.CFrame = CFrame.new(px, BUILDING_BASE + 0.15 * scale, pz) * CFrame.Angles(0, 0, math.rad(90))
+		floor.Anchored = true
+		floor.Material = Enum.Material.Concrete
+		floor.Color = Color3.fromRGB(70, 80, 85)
+		floor.Parent = model
+
+		-- Water fill (neon cylinder)
+		local waterDiam = tankDiam - 0.4 * scale
+		local waterH = tankH - 0.3 * scale
+		local water = Instance.new("Part")
+		water.Name = "ClarifierWater"
+		water.Shape = Enum.PartType.Cylinder
+		water.Size = Vector3.new(waterH, waterDiam, waterDiam)
+		water.CFrame = CFrame.new(px, BUILDING_BASE + 0.3 * scale + waterH / 2, pz) * CFrame.Angles(0, 0, math.rad(90))
+		water.Anchored = true
+		water.CanCollide = false
+		water.Material = Enum.Material.Neon
+		water.Color = spec.waterColor
+		water.Transparency = 0.35
+		water.Parent = model
+
+		local waterLight = Instance.new("PointLight")
+		waterLight.Brightness = 0.8
+		waterLight.Range = 10
+		waterLight.Color = spec.waterGlow
+		waterLight.Parent = water
+
+		-- Bubble particles
+		local bubblePart = Instance.new("Part")
+		bubblePart.Name = "BubblePoint"
+		bubblePart.Size = Vector3.new(waterDiam * 0.6, 1, waterDiam * 0.6)
+		bubblePart.Position = Vector3.new(px, BUILDING_BASE + tankH + 0.2 * scale, pz)
+		bubblePart.Anchored = true
+		bubblePart.CanCollide = false
+		bubblePart.Transparency = 1
+		bubblePart.Parent = model
+
+		local bubbles = Instance.new("ParticleEmitter")
+		bubbles.Name = "Bubbles"
+		bubbles.Rate = 25
+		bubbles.Speed = NumberRange.new(1, 4)
+		bubbles.Lifetime = NumberRange.new(1.0, 2.0)
+		bubbles.SpreadAngle = Vector2.new(25, 25)
+		bubbles.LightEmission = 0.4
+		bubbles.Size = NumberSequence.new({
+			NumberSequenceKeypoint.new(0, 0.3),
+			NumberSequenceKeypoint.new(0.4, 0.7),
+			NumberSequenceKeypoint.new(0.8, 0.5),
+			NumberSequenceKeypoint.new(1, 0.1),
+		})
+		bubbles.Transparency = NumberSequence.new({
+			NumberSequenceKeypoint.new(0, 0.1),
+			NumberSequenceKeypoint.new(0.5, 0.3),
+			NumberSequenceKeypoint.new(1, 1),
+		})
+		bubbles.Color = ColorSequence.new(spec.waterGlow, Color3.fromRGB(220, 240, 255))
+		bubbles.Brightness = 1
+		bubbles.Parent = bubblePart
+
+		-- Center column
+		local centerCol = Instance.new("Part")
+		centerCol.Name = "ClarifierCenter"
+		centerCol.Shape = Enum.PartType.Cylinder
+		centerCol.Size = Vector3.new(tankH + 2 * scale, 1.2 * scale, 1.2 * scale)
+		centerCol.CFrame = CFrame.new(px, BUILDING_BASE + (tankH + 2 * scale) / 2, pz) * CFrame.Angles(0, 0, math.rad(90))
+		centerCol.Anchored = true
+		centerCol.Material = Enum.Material.Metal
+		centerCol.Color = Color3.fromRGB(120, 120, 125)
+		centerCol.Parent = model
+
+		-- Rotating scraper arm
+		local armLen = tankDiam / 2 - 0.5 * scale
+		local armH = 0.4 * scale
+		local armW = 0.6 * scale
+		local armY = BUILDING_BASE + tankH + 0.8 * scale
+
+		local arm = Instance.new("Part")
+		arm.Name = "ScraperArm"
+		arm.Size = Vector3.new(armLen, armH, armW)
+		arm.CFrame = CFrame.new(px, armY, pz) * CFrame.new(armLen / 2, 0, 0)
+		arm.Anchored = true
+		arm.Material = Enum.Material.Metal
+		arm.Color = Color3.fromRGB(140, 140, 145)
+		arm.Parent = model
+
+		-- Track animation data for caller
+		table.insert(clarifierAnims, {
+			type = "clarifier_arm",
+			arm = arm,
+			centerX = px,
+			centerY = armY,
+			centerZ = pz,
+			armOffset = armLen / 2,
+			angle = math.random() * math.pi * 2,
+			speed = 0.3,
+		})
+	end
+
+	---------------------------------------------------------------------------
+	-- 2 CLARIFIER TANKS (along Z, -X side of area)
+	---------------------------------------------------------------------------
+	local tankSpacing = 16 * scale
+	local tankX = centerX - 5 * scale
+	createClarifier(tankX, centerZ - tankSpacing / 2)
+	createClarifier(tankX, centerZ + tankSpacing / 2)
+
+	---------------------------------------------------------------------------
+	-- SETTLING BASIN (open-top: 4 walls + floor + water fill)
+	---------------------------------------------------------------------------
+	local basinW = 16 * scale
+	local basinH = 3 * scale
+	local basinD = 28 * scale
+	local basinX = centerX + 4 * scale
+	local wallT = 0.6 * scale
+	local basinColor = Color3.fromRGB(140, 145, 150)
+
+	-- Floor
+	local basinFloor = Instance.new("Part")
+	basinFloor.Name = "BasinFloor"
+	basinFloor.Size = Vector3.new(basinW, wallT, basinD)
+	basinFloor.Position = Vector3.new(basinX, BUILDING_BASE + wallT / 2, centerZ)
+	basinFloor.Anchored = true
+	basinFloor.Material = Enum.Material.Concrete
+	basinFloor.Color = Color3.fromRGB(70, 80, 85)
+	basinFloor.Parent = model
+
+	-- 4 walls
+	local wallDefs = {
+		{ s = Vector3.new(wallT, basinH, basinD), p = Vector3.new(basinX - basinW / 2 + wallT / 2, BUILDING_BASE + basinH / 2, centerZ) },
+		{ s = Vector3.new(wallT, basinH, basinD), p = Vector3.new(basinX + basinW / 2 - wallT / 2, BUILDING_BASE + basinH / 2, centerZ) },
+		{ s = Vector3.new(basinW, basinH, wallT), p = Vector3.new(basinX, BUILDING_BASE + basinH / 2, centerZ - basinD / 2 + wallT / 2) },
+		{ s = Vector3.new(basinW, basinH, wallT), p = Vector3.new(basinX, BUILDING_BASE + basinH / 2, centerZ + basinD / 2 - wallT / 2) },
+	}
+	for _, def in ipairs(wallDefs) do
+		local w = Instance.new("Part")
+		w.Name = "BasinWall"
+		w.Size = def.s
+		w.Position = def.p
+		w.Anchored = true
+		w.Material = Enum.Material.Concrete
+		w.Color = basinColor
+		w.Parent = model
+	end
+
+	-- Water fill
+	local innerW = basinW - wallT * 2
+	local innerD = basinD - wallT * 2
+	local waterH2 = basinH - wallT - 0.3 * scale
+	local basinWater = Instance.new("Part")
+	basinWater.Name = "BasinWater"
+	basinWater.Size = Vector3.new(innerW, waterH2, innerD)
+	basinWater.Position = Vector3.new(basinX, BUILDING_BASE + wallT + waterH2 / 2, centerZ)
+	basinWater.Anchored = true
+	basinWater.CanCollide = false
+	basinWater.Material = Enum.Material.Neon
+	basinWater.Color = spec.waterColor
+	basinWater.Transparency = 0.4
+	basinWater.Parent = model
+
+	local basinGlow = Instance.new("PointLight")
+	basinGlow.Brightness = 0.6
+	basinGlow.Range = 10
+	basinGlow.Color = spec.waterGlow
+	basinGlow.Parent = basinWater
+
+	-- Basin bubble aeration
+	local basinBubblePart = Instance.new("Part")
+	basinBubblePart.Name = "BasinBubblePoint"
+	basinBubblePart.Size = Vector3.new(innerW * 0.5, 1, innerD * 0.4)
+	basinBubblePart.Position = Vector3.new(basinX, BUILDING_BASE + basinH + 0.1 * scale, centerZ)
+	basinBubblePart.Anchored = true
+	basinBubblePart.CanCollide = false
+	basinBubblePart.Transparency = 1
+	basinBubblePart.Parent = model
+
+	local basinBubbles = Instance.new("ParticleEmitter")
+	basinBubbles.Name = "BasinBubbles"
+	basinBubbles.Rate = 20
+	basinBubbles.Speed = NumberRange.new(1, 3)
+	basinBubbles.Lifetime = NumberRange.new(0.8, 1.8)
+	basinBubbles.SpreadAngle = Vector2.new(15, 15)
+	basinBubbles.LightEmission = 0.4
+	basinBubbles.Size = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 0.2),
+		NumberSequenceKeypoint.new(0.4, 0.6),
+		NumberSequenceKeypoint.new(1, 0.1),
+	})
+	basinBubbles.Transparency = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 0.1),
+		NumberSequenceKeypoint.new(0.6, 0.4),
+		NumberSequenceKeypoint.new(1, 1),
+	})
+	basinBubbles.Color = ColorSequence.new(spec.waterGlow, Color3.fromRGB(220, 240, 255))
+	basinBubbles.Brightness = 1
+	basinBubbles.Parent = basinBubblePart
+
+	-- Waterfall overflow at +Z edge
+	local fallPart = Instance.new("Part")
+	fallPart.Name = "WaterfallPoint"
+	fallPart.Size = Vector3.new(basinW * 0.5, 1, 1)
+	fallPart.Position = Vector3.new(basinX, BUILDING_BASE + basinH, centerZ + basinD / 2)
+	fallPart.Anchored = true
+	fallPart.CanCollide = false
+	fallPart.Transparency = 1
+	fallPart.Parent = model
+
+	local waterfall = Instance.new("ParticleEmitter")
+	waterfall.Name = "Waterfall"
+	waterfall.Rate = 40
+	waterfall.Speed = NumberRange.new(0.5, 2)
+	waterfall.Lifetime = NumberRange.new(0.6, 1.4)
+	waterfall.SpreadAngle = Vector2.new(10, 5)
+	waterfall.LightEmission = 0.2
+	waterfall.Size = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 0.5),
+		NumberSequenceKeypoint.new(0.5, 1.0),
+		NumberSequenceKeypoint.new(1, 0.3),
+	})
+	waterfall.Transparency = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 0.1),
+		NumberSequenceKeypoint.new(0.5, 0.3),
+		NumberSequenceKeypoint.new(1, 1),
+	})
+	waterfall.Color = ColorSequence.new(spec.waterColor)
+	waterfall.Brightness = 1
+	waterfall.Acceleration = Vector3.new(0, -8, 0)
+	waterfall.Parent = fallPart
+
+	-- Catwalk railings over basin
+	local railH = 3.5 * scale
+	local railY = BUILDING_BASE + basinH + railH / 2
+	for _, rOff in ipairs({ -basinW / 2 + 0.5 * scale, basinW / 2 - 0.5 * scale }) do
+		local rail = Instance.new("Part")
+		rail.Name = "CatwalkRail"
+		rail.Size = Vector3.new(0.2 * scale, railH, basinD)
+		rail.Position = Vector3.new(basinX + rOff, railY, centerZ)
+		rail.Anchored = true
+		rail.Material = Enum.Material.Metal
+		rail.Color = Color3.fromRGB(180, 180, 60)
+		rail.Transparency = 0.1
+		rail.Parent = model
+	end
+
+	-- Catwalk floor
+	local walkway = Instance.new("Part")
+	walkway.Name = "CatwalkFloor"
+	walkway.Size = Vector3.new(basinW - 1 * scale, 0.2 * scale, basinD)
+	walkway.Position = Vector3.new(basinX, BUILDING_BASE + basinH + 0.1 * scale, centerZ)
+	walkway.Anchored = true
+	walkway.Material = Enum.Material.DiamondPlate
+	walkway.Color = Color3.fromRGB(110, 110, 115)
+	walkway.Transparency = 0.4
+	walkway.Parent = model
+
+	---------------------------------------------------------------------------
+	-- PIPE NETWORK (connecting clarifiers to basin)
+	---------------------------------------------------------------------------
+	local pipeDiam = 1.8 * scale
+	local pipeColor = Color3.fromRGB(60, 130, 180)
+
+	for _, side in ipairs({ -1, 1 }) do
+		local pipeZ = centerZ + side * tankSpacing / 2
+		local pipeStartX = tankX + 7 * scale
+		local pipeEndX = basinX - basinW / 2
+		local pipeLen = math.abs(pipeEndX - pipeStartX)
+		local pipeMidX = (pipeStartX + pipeEndX) / 2
+
+		local pipe = Instance.new("Part")
+		pipe.Name = "ConnectPipe"
+		pipe.Shape = Enum.PartType.Cylinder
+		pipe.Size = Vector3.new(pipeLen, pipeDiam, pipeDiam)
+		pipe.CFrame = CFrame.new(pipeMidX, BUILDING_BASE + 2.5 * scale, pipeZ)
+			* CFrame.Angles(0, math.rad(90), 0)
+			* CFrame.Angles(0, 0, math.rad(90))
+		pipe.Anchored = true
+		pipe.Material = Enum.Material.Metal
+		pipe.Color = pipeColor
+		pipe.Parent = model
+
+		-- Valve wheel
+		local valveDiam = 1.5 * scale
+		local valve = Instance.new("Part")
+		valve.Name = "PipeValve"
+		valve.Shape = Enum.PartType.Cylinder
+		valve.Size = Vector3.new(0.3 * scale, valveDiam, valveDiam)
+		valve.CFrame = CFrame.new(pipeMidX, BUILDING_BASE + 2.5 * scale + pipeDiam / 2 + 0.5 * scale, pipeZ)
+			* CFrame.Angles(0, 0, math.rad(90))
+		valve.Anchored = true
+		valve.Material = Enum.Material.Metal
+		valve.Color = Color3.fromRGB(180, 40, 40)
+		valve.Parent = model
+	end
+
+	---------------------------------------------------------------------------
+	-- WATER TOWER (elevated sphere on stilts, -Z side)
+	---------------------------------------------------------------------------
+	local towerX = centerX + 13 * scale
+	local towerZ = centerZ - 8 * scale
+	local stiltsH = 16 * scale
+	local sphereDiam = 8 * scale
+
+	local stiltW = 0.8 * scale
+	local stiltSpread = 3 * scale
+	for _, sx in ipairs({ -stiltSpread, stiltSpread }) do
+		for _, sz in ipairs({ -stiltSpread, stiltSpread }) do
+			local stilt = Instance.new("Part")
+			stilt.Name = "TowerStilt"
+			stilt.Size = Vector3.new(stiltW, stiltsH, stiltW)
+			stilt.Position = Vector3.new(towerX + sx, BUILDING_BASE + stiltsH / 2, towerZ + sz)
+			stilt.Anchored = true
+			stilt.Material = Enum.Material.Metal
+			stilt.Color = Color3.fromRGB(120, 120, 125)
+			stilt.Parent = model
+		end
+	end
+
+	-- Cross braces
+	for _, bz in ipairs({ -stiltSpread, stiltSpread }) do
+		local brace = Instance.new("Part")
+		brace.Name = "TowerBrace"
+		brace.Size = Vector3.new(stiltSpread * 2, 0.5 * scale, 0.5 * scale)
+		brace.CFrame = CFrame.new(towerX, BUILDING_BASE + stiltsH * 0.5, towerZ + bz)
+			* CFrame.Angles(0, 0, math.rad(25))
+		brace.Anchored = true
+		brace.Material = Enum.Material.Metal
+		brace.Color = Color3.fromRGB(115, 115, 120)
+		brace.Parent = model
+	end
+
+	-- Water sphere
+	local sphere = Instance.new("Part")
+	sphere.Name = "WaterTowerSphere"
+	sphere.Shape = Enum.PartType.Ball
+	sphere.Size = Vector3.new(sphereDiam, sphereDiam, sphereDiam)
+	sphere.Position = Vector3.new(towerX, BUILDING_BASE + stiltsH + sphereDiam / 2, towerZ)
+	sphere.Anchored = true
+	sphere.Material = Enum.Material.SmoothPlastic
+	sphere.Color = Color3.fromRGB(180, 200, 220)
+	sphere.Parent = model
+
+	-- Water tower label (on +Z face)
+	local towerGui = Instance.new("SurfaceGui")
+	towerGui.Face = Enum.NormalId.Front
+	towerGui.Parent = sphere
+
+	local towerTxt = Instance.new("TextLabel")
+	towerTxt.Size = UDim2.new(0.8, 0, 0.3, 0)
+	towerTxt.Position = UDim2.new(0.1, 0, 0.35, 0)
+	towerTxt.BackgroundTransparency = 1
+	towerTxt.Font = Enum.Font.GothamBold
+	towerTxt.Text = "H2O"
+	towerTxt.TextColor3 = Color3.fromRGB(60, 100, 160)
+	towerTxt.TextScaled = true
+	towerTxt.Parent = towerGui
+
+	---------------------------------------------------------------------------
+	-- 2 CHEMICAL TANKS (near water tower)
+	---------------------------------------------------------------------------
+	for i = 1, 2 do
+		local chemZ = towerZ + (10 + (i - 1) * 6) * scale
+		local chemX = towerX
+		local chemDiam = 3 * scale
+		local chemH = 10 * scale
+
+		local chem = Instance.new("Part")
+		chem.Name = "ChemicalTank"
+		chem.Shape = Enum.PartType.Cylinder
+		chem.Size = Vector3.new(chemH, chemDiam, chemDiam)
+		chem.CFrame = CFrame.new(chemX, BUILDING_BASE + chemH / 2, chemZ) * CFrame.Angles(0, 0, math.rad(90))
+		chem.Anchored = true
+		chem.Material = Enum.Material.SmoothPlastic
+		chem.Color = spec.chemColors[i]
+		chem.Parent = model
+
+		local cap = Instance.new("Part")
+		cap.Name = "TankCap"
+		cap.Shape = Enum.PartType.Cylinder
+		cap.Size = Vector3.new(0.5 * scale, chemDiam + 0.3, chemDiam + 0.3)
+		cap.CFrame = CFrame.new(chemX, BUILDING_BASE + chemH + 0.25 * scale, chemZ) * CFrame.Angles(0, 0, math.rad(90))
+		cap.Anchored = true
+		cap.Material = Enum.Material.Metal
+		cap.Color = Color3.fromRGB(80, 80, 85)
+		cap.Parent = model
+
+		-- Chemical label (on +Z face)
+		local labelPart = Instance.new("Part")
+		labelPart.Name = "ChemLabel"
+		labelPart.Size = Vector3.new(2.5 * scale, 1.5 * scale, 0.1)
+		labelPart.Position = Vector3.new(chemX, BUILDING_BASE + chemH * 0.6, chemZ + chemDiam / 2 + 0.05)
+		labelPart.Anchored = true
+		labelPart.CanCollide = false
+		labelPart.Material = Enum.Material.SmoothPlastic
+		labelPart.Color = Color3.fromRGB(240, 240, 240)
+		labelPart.Parent = model
+
+		local labelGui = Instance.new("SurfaceGui")
+		labelGui.Face = Enum.NormalId.Front
+		labelGui.Parent = labelPart
+
+		local labelTxt = Instance.new("TextLabel")
+		labelTxt.Size = UDim2.new(1, 0, 1, 0)
+		labelTxt.BackgroundTransparency = 1
+		labelTxt.Font = Enum.Font.GothamBold
+		labelTxt.Text = spec.chemLabels[i]
+		labelTxt.TextColor3 = Color3.fromRGB(30, 30, 30)
+		labelTxt.TextScaled = true
+		labelTxt.Parent = labelGui
+	end
+
+	---------------------------------------------------------------------------
+	-- CONTROL BOOTH (small building, +Z side)
+	---------------------------------------------------------------------------
+	local boothW = 8 * scale
+	local boothH2 = 6 * scale
+	local boothD = 6 * scale
+	local boothX = centerX - 10 * scale
+	local boothZ = centerZ + 12 * scale
+
+	local booth = Instance.new("Part")
+	booth.Name = "ControlBooth"
+	booth.Size = Vector3.new(boothW, boothH2, boothD)
+	booth.Position = Vector3.new(boothX, BUILDING_BASE + boothH2 / 2, boothZ)
+	booth.Anchored = true
+	booth.Material = Enum.Material.Concrete
+	booth.Color = spec.boothColor
+	booth.Parent = model
+
+	local boothRoof = Instance.new("Part")
+	boothRoof.Name = "BoothRoof"
+	boothRoof.Size = Vector3.new(boothW + 1 * scale, 0.4 * scale, boothD + 1 * scale)
+	boothRoof.Position = Vector3.new(boothX, BUILDING_BASE + boothH2 + 0.2 * scale, boothZ)
+	boothRoof.Anchored = true
+	boothRoof.Material = Enum.Material.Metal
+	boothRoof.Color = Color3.fromRGB(70, 70, 75)
+	boothRoof.Parent = model
+
+	-- Booth window (+Z face)
+	local boothWin = Instance.new("Part")
+	boothWin.Name = "BoothWindow"
+	boothWin.Size = Vector3.new(4 * scale, 2.5 * scale, 0.2 * scale)
+	boothWin.Position = Vector3.new(boothX, BUILDING_BASE + boothH2 * 0.65, boothZ + boothD / 2 + 0.1)
+	boothWin.Anchored = true
+	boothWin.CanCollide = false
+	boothWin.Material = Enum.Material.Glass
+	boothWin.Color = Color3.fromRGB(180, 210, 240)
+	boothWin.Transparency = 0.3
+	boothWin.Parent = model
+
+	local boothLight = Instance.new("PointLight")
+	boothLight.Brightness = 1.0
+	boothLight.Range = 8
+	boothLight.Color = Color3.fromRGB(255, 240, 200)
+	boothLight.Parent = boothWin
+
+	---------------------------------------------------------------------------
+	-- MAIN SIGN (neon text, +Z face)
+	---------------------------------------------------------------------------
+	local signW4 = 14 * scale
+	local signH4 = 2.5 * scale
+
+	local signPart3 = Instance.new("Part")
+	signPart3.Name = "WaterPlantSign"
+	signPart3.Size = Vector3.new(signW4, signH4, 0.4 * scale)
+	signPart3.Position = Vector3.new(centerX, BUILDING_BASE + 8 * scale, centerZ + 16 * scale)
+	signPart3.Anchored = true
+	signPart3.Material = Enum.Material.Neon
+	signPart3.Color = spec.signColor
+	signPart3.Parent = model
+
+	local gui3 = Instance.new("SurfaceGui")
+	gui3.Face = Enum.NormalId.Front
+	gui3.Parent = signPart3
+
+	local txt3 = Instance.new("TextLabel")
+	txt3.Size = UDim2.new(1, 0, 1, 0)
+	txt3.BackgroundTransparency = 1
+	txt3.Font = Enum.Font.GothamBold
+	txt3.Text = spec.signText
+	txt3.TextColor3 = Color3.new(1, 1, 1)
+	txt3.TextScaled = true
+	txt3.Parent = gui3
+
+	local signLight3 = Instance.new("PointLight")
+	signLight3.Brightness = 1.2
+	signLight3.Range = 12
+	signLight3.Color = spec.signColor
+	signLight3.Parent = signPart3
+
+	---------------------------------------------------------------------------
+	-- FLOOD LIGHTS (4 poles around the facility)
+	---------------------------------------------------------------------------
+	local floodH = 12 * scale
+	local floodPositions = {
+		{ x = tankX, z = centerZ - tankSpacing / 2 - 9 * scale },
+		{ x = tankX, z = centerZ + tankSpacing / 2 + 9 * scale },
+		{ x = basinX, z = centerZ - basinD / 2 - 2 * scale },
+		{ x = basinX, z = centerZ + basinD / 2 + 2 * scale },
+	}
+	for _, fp in ipairs(floodPositions) do
+		local pole = Instance.new("Part")
+		pole.Name = "FloodPole"
+		pole.Size = Vector3.new(0.4 * scale, floodH, 0.4 * scale)
+		pole.Position = Vector3.new(fp.x, BUILDING_BASE + floodH / 2, fp.z)
+		pole.Anchored = true
+		pole.Material = Enum.Material.Metal
+		pole.Color = Color3.fromRGB(110, 110, 115)
+		pole.Parent = model
+
+		local fixture = Instance.new("Part")
+		fixture.Name = "FloodLight"
+		fixture.Size = Vector3.new(1.5 * scale, 0.6 * scale, 1.5 * scale)
+		fixture.Position = Vector3.new(fp.x, BUILDING_BASE + floodH + 0.3 * scale, fp.z)
+		fixture.Anchored = true
+		fixture.Material = Enum.Material.Neon
+		fixture.Color = Color3.fromRGB(255, 240, 210)
+		fixture.Parent = model
+
+		local flood = Instance.new("PointLight")
+		flood.Brightness = 1.0
+		flood.Range = 16
+		flood.Color = Color3.fromRGB(255, 245, 220)
+		flood.Parent = fixture
+	end
+
+	---------------------------------------------------------------------------
+	-- SECURITY FENCE (+Z perimeter)
+	---------------------------------------------------------------------------
+	local fenceH2 = 3.5 * scale
+	local fenceW2 = 38 * scale
+	local fenceZ3 = centerZ + 20 * scale
+
+	local fence = Instance.new("Part")
+	fence.Name = "SecurityFence"
+	fence.Size = Vector3.new(fenceW2, fenceH2, 0.3 * scale)
+	fence.Position = Vector3.new(centerX, BUILDING_BASE + fenceH2 / 2, fenceZ3)
+	fence.Anchored = true
+	fence.Material = Enum.Material.Metal
+	fence.Color = Color3.fromRGB(130, 130, 135)
+	fence.Transparency = 0.3
+	fence.Parent = model
+
+	local postSpacing = fenceW2 / 7
+	for i = 1, 6 do
+		local postX = centerX - fenceW2 / 2 + i * postSpacing
+		local post = Instance.new("Part")
+		post.Name = "FencePost"
+		post.Size = Vector3.new(0.4 * scale, fenceH2 + 0.5 * scale, 0.4 * scale)
+		post.Position = Vector3.new(postX, BUILDING_BASE + (fenceH2 + 0.5 * scale) / 2, fenceZ3)
+		post.Anchored = true
+		post.Material = Enum.Material.Metal
+		post.Color = Color3.fromRGB(110, 110, 115)
+		post.Parent = model
+	end
+
+	if options.parent then
+		model.Parent = options.parent
+	end
+
+	-- Return animation data for clarifier arms
+	return model, clarifierAnims
+end
+
 return AssetLibrary
