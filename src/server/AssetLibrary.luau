@@ -2342,4 +2342,147 @@ function AssetLibrary.getShopVariants()
 	return { "standard", "luxury" }
 end
 
+--------------------------------------------------------------------------------
+-- HOOD BUILDING CONSTANTS
+--------------------------------------------------------------------------------
+
+local HOOD_WALL_COLORS = {
+	Color3.fromRGB(140, 120, 100),  -- dirty beige
+	Color3.fromRGB(120, 110, 100),  -- grimy grey
+	Color3.fromRGB(130, 100, 80),   -- faded brown
+	Color3.fromRGB(110, 105, 95),   -- dark concrete
+	Color3.fromRGB(100, 90, 80),    -- smoky
+}
+
+local HOOD_SHOP_NAMES = {
+	"LAUNDRY", "BARBER", "BODEGA", "TIRES", "99c STORE",
+	"AUTO PARTS", "NAILS", "CHICKEN", "TACOS", "PHONE FIX",
+	"SNEAKERS", "MUSIC", "PET SHOP", "CANDY", "JUICE BAR",
+}
+
+--------------------------------------------------------------------------------
+-- createHoodBuilding(centerX, centerZ, options)
+-- Ground-floor shop + 2-4 upper brick apartment floors stacked on top.
+-- options.facadeWidth: facade width in studs (default random 16-26)
+-- options.extraFloors: 2-4 upper apartment floors (default random)
+-- options.scale: number (default 1)
+-- options.shopName: string (default random from hood names)
+-- options.parent: Instance to parent to
+-- Returns: Model
+--------------------------------------------------------------------------------
+
+function AssetLibrary.createHoodBuilding(centerX, centerZ, options)
+	options = options or {}
+	local scale = options.scale or 1
+	local facadeWidth = options.facadeWidth or math.random(16, 26)
+
+	-- Build the shop base using createShop
+	local shopModel = AssetLibrary.createShop(centerX, centerZ, {
+		variant = "standard",
+		facadeWidth = facadeWidth,
+		scale = scale,
+		shopName = options.shopName or pickRandom(HOOD_SHOP_NAMES),
+	})
+
+	-- Rename to hood building
+	shopModel.Name = "HoodBuilding"
+
+	-- Stack hood apartment floors on top
+	local extraFloors = options.extraFloors or math.random(2, 4)
+	local floorH = 8 * scale
+	local shopH = 2 * 10 * scale  -- 2 shop floors × 10 studs
+	local extraH = extraFloors * floorH
+	local wallColor = pickRandom(HOOD_WALL_COLORS)
+
+	local bDepth = SHOP_DEPTH * scale
+	local facadeLen = facadeWidth * scale
+
+	-- Upper brick body
+	local body = Instance.new("Part")
+	body.Name = "UpperBody"
+	body.Size = Vector3.new(facadeLen, extraH, bDepth)
+	body.Position = Vector3.new(centerX, BUILDING_BASE + shopH + extraH / 2, centerZ)
+	body.Anchored = true
+	body.Material = Enum.Material.Brick
+	body.Color = wallColor
+	body:SetAttribute("ThemeRole", "building_body")
+	body:SetAttribute("BaseColor", wallColor)
+	body:SetAttribute("BaseMaterial", "Brick")
+	body.Parent = shopModel
+
+	-- Windows on all 4 faces
+	local winW = 2 * scale
+	local winH = 3 * scale
+	local winGap = 2 * scale
+
+	-- Front (+Z) and Back (-Z) windows
+	for _, faceData in ipairs({
+		{ axis = "z", coord = centerZ + bDepth / 2 + 0.2, width = facadeLen, litChance = 0.4 },
+		{ axis = "z", coord = centerZ - bDepth / 2 - 0.2, width = facadeLen, litChance = 0.2 },
+		{ axis = "x", coord = centerX - facadeLen / 2 - 0.2, width = bDepth, litChance = 0.15 },
+		{ axis = "x", coord = centerX + facadeLen / 2 + 0.2, width = bDepth, litChance = 0.15 },
+	}) do
+		local center = faceData.axis == "z" and centerX or centerZ
+		local available = faceData.width - 3
+		local numWin = math.floor((available + winGap) / (winW + winGap))
+		if numWin > 0 then
+			local totalWinW = numWin * winW + (numWin - 1) * winGap
+			local winStart = -totalWinW / 2 + winW / 2
+
+			for floor = 1, extraFloors do
+				local floorY = BUILDING_BASE + shopH + (floor - 0.5) * floorH
+				for w = 1, numWin do
+					local offset = winStart + (w - 1) * (winW + winGap)
+					local win = Instance.new("Part")
+					win.Name = "Window"
+					win.Anchored = true
+					win.CanCollide = false
+
+					if faceData.axis == "z" then
+						win.Size = Vector3.new(winW, winH, 0.3)
+						win.Position = Vector3.new(center + offset, floorY, faceData.coord)
+					else
+						win.Size = Vector3.new(0.3, winH, winW)
+						win.Position = Vector3.new(faceData.coord, floorY, center + offset)
+					end
+
+					if math.random() < faceData.litChance then
+						win.Material = Enum.Material.Neon
+						win.Color = Color3.fromRGB(255, 200, 100)
+						win:SetAttribute("ThemeRole", "building_window_lit")
+						win:SetAttribute("BaseColor", Color3.fromRGB(255, 200, 100))
+						win:SetAttribute("BaseMaterial", "Neon")
+					else
+						win.Material = Enum.Material.Glass
+						win.Color = Color3.fromRGB(50, 60, 70)
+						win:SetAttribute("ThemeRole", "building_window")
+						win:SetAttribute("BaseColor", Color3.fromRGB(50, 60, 70))
+						win:SetAttribute("BaseMaterial", "Glass")
+					end
+					win.Parent = shopModel
+				end
+			end
+		end
+	end
+
+	-- Flat roof edge (replaces the shop roof)
+	local roofEdge = Instance.new("Part")
+	roofEdge.Name = "RoofEdge"
+	roofEdge.Size = Vector3.new(facadeLen + 0.5, 0.8, bDepth + 0.5)
+	roofEdge.Position = Vector3.new(centerX, BUILDING_BASE + shopH + extraH + 0.4, centerZ)
+	roofEdge.Anchored = true
+	roofEdge.Material = Enum.Material.Concrete
+	roofEdge.Color = Color3.fromRGB(80, 75, 70)
+	roofEdge:SetAttribute("ThemeRole", "building_roof")
+	roofEdge:SetAttribute("BaseColor", Color3.fromRGB(80, 75, 70))
+	roofEdge:SetAttribute("BaseMaterial", "Concrete")
+	roofEdge.Parent = shopModel
+
+	if options.parent then
+		shopModel.Parent = options.parent
+	end
+
+	return shopModel
+end
+
 return AssetLibrary
