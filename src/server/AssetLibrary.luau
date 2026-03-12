@@ -2734,4 +2734,215 @@ function AssetLibrary.getMiamiPaletteCount()
 	return #MIAMI_PALETTES
 end
 
+--------------------------------------------------------------------------------
+-- DOCK BUILDING SPECS
+-- Industrial dock warehouses: 6 palette variants (material + color combos)
+-- 3 floors, 30W × 20D studs, loading bay doors, roof vents
+--------------------------------------------------------------------------------
+
+local DOCK_PALETTES = {
+	{ name = "brick",      body = Color3.fromRGB(140, 65, 55),   trim = Color3.fromRGB(70, 70, 75),  accent = Color3.fromRGB(255, 180, 80),  mat = Enum.Material.Brick },
+	{ name = "concrete",   body = Color3.fromRGB(85, 85, 90),    trim = Color3.fromRGB(55, 55, 60),  accent = Color3.fromRGB(200, 220, 255), mat = Enum.Material.Concrete },
+	{ name = "rust",       body = Color3.fromRGB(120, 80, 50),   trim = Color3.fromRGB(80, 60, 45),  accent = Color3.fromRGB(255, 200, 100), mat = Enum.Material.CorrodedMetal },
+	{ name = "blue_steel", body = Color3.fromRGB(50, 65, 95),    trim = Color3.fromRGB(40, 45, 55),  accent = Color3.fromRGB(140, 200, 255), mat = Enum.Material.CorrodedMetal },
+	{ name = "olive",      body = Color3.fromRGB(75, 85, 60),    trim = Color3.fromRGB(50, 55, 45),  accent = Color3.fromRGB(180, 255, 140), mat = Enum.Material.CorrodedMetal },
+	{ name = "tan",        body = Color3.fromRGB(170, 155, 130), trim = Color3.fromRGB(90, 85, 75),  accent = Color3.fromRGB(255, 230, 170), mat = Enum.Material.Brick },
+}
+
+--------------------------------------------------------------------------------
+-- createDockBuilding(centerX, centerZ, options)
+-- options.palette: 1-6 or palette name string (default random)
+-- options.scale: number (default 1)
+-- options.parent: Instance to parent to
+-- Returns: Model
+--------------------------------------------------------------------------------
+
+function AssetLibrary.createDockBuilding(centerX, centerZ, options)
+	options = options or {}
+	local scale = options.scale or 1
+
+	-- Resolve palette
+	local paletteIndex
+	if type(options.palette) == "number" then
+		paletteIndex = math.clamp(options.palette, 1, #DOCK_PALETTES)
+	elseif type(options.palette) == "string" then
+		for i, p in ipairs(DOCK_PALETTES) do
+			if p.name == options.palette then paletteIndex = i; break end
+		end
+		paletteIndex = paletteIndex or math.random(1, #DOCK_PALETTES)
+	else
+		paletteIndex = math.random(1, #DOCK_PALETTES)
+	end
+	local palette = DOCK_PALETTES[paletteIndex]
+
+	-- Dimensions
+	local bodyW = 30 * scale
+	local bodyD = 20 * scale
+	local floorH = 5 * scale
+	local floors = 3
+	local bodyH = floors * floorH
+
+	local model = Instance.new("Model")
+	model.Name = "DockBuilding"
+
+	-- Main body
+	local body = Instance.new("Part")
+	body.Name = "Body"
+	body.Size = Vector3.new(bodyW, bodyH, bodyD)
+	body.Position = Vector3.new(centerX, BUILDING_BASE + bodyH / 2, centerZ)
+	body.Anchored = true
+	body.CanCollide = true
+	body.Material = palette.mat
+	body.Color = palette.body
+	body:SetAttribute("ThemeRole", "building_body")
+	body:SetAttribute("BaseColor", palette.body)
+	body:SetAttribute("BaseMaterial", palette.mat.Name)
+	body.Parent = model
+
+	-- Metal base strip
+	local baseStrip = Instance.new("Part")
+	baseStrip.Name = "BaseStrip"
+	baseStrip.Size = Vector3.new(bodyW + 0.4 * scale, 1.5 * scale, bodyD + 0.4 * scale)
+	baseStrip.Position = Vector3.new(centerX, BUILDING_BASE + 0.75 * scale, centerZ)
+	baseStrip.Anchored = true
+	baseStrip.CanCollide = false
+	baseStrip.Material = Enum.Material.Metal
+	baseStrip.Color = palette.trim
+	baseStrip.Parent = model
+
+	-- Metal roof
+	local roof = Instance.new("Part")
+	roof.Name = "Roof"
+	roof.Size = Vector3.new(bodyW + 2 * scale, 0.6 * scale, bodyD + 2 * scale)
+	roof.Position = Vector3.new(centerX, BUILDING_BASE + bodyH + 0.3 * scale, centerZ)
+	roof.Anchored = true
+	roof.CanCollide = false
+	roof.Material = Enum.Material.Metal
+	roof.Color = palette.trim
+	roof:SetAttribute("ThemeRole", "building_roof")
+	roof:SetAttribute("BaseColor", palette.trim)
+	roof:SetAttribute("BaseMaterial", "Metal")
+	roof.Parent = model
+
+	-- Roof vents
+	for i = -1, 1 do
+		local vent = Instance.new("Part")
+		vent.Name = "RoofVent"
+		vent.Size = Vector3.new(3.5 * scale, 2 * scale, 2.5 * scale)
+		vent.Position = Vector3.new(centerX + i * 8 * scale, BUILDING_BASE + bodyH + 1.3 * scale, centerZ)
+		vent.Anchored = true
+		vent.CanCollide = false
+		vent.Material = Enum.Material.Metal
+		vent.Color = palette.trim
+		vent.Parent = model
+	end
+
+	-- Loading bay doors on front (+Z) and back (-Z)
+	local doorH = floorH * 0.8
+	local doorW = 6 * scale
+	for _, faceData in ipairs({
+		{ z = centerZ + bodyD / 2 + 0.05 },
+		{ z = centerZ - bodyD / 2 - 0.05 },
+	}) do
+		for _, dx in ipairs({ -8 * scale, 0, 8 * scale }) do
+			local door = Instance.new("Part")
+			door.Name = "LoadingDoor"
+			door.Size = Vector3.new(doorW, doorH, 0.3)
+			door.Position = Vector3.new(centerX + dx, BUILDING_BASE + doorH / 2, faceData.z)
+			door.Anchored = true
+			door.CanCollide = false
+			door.Material = Enum.Material.DiamondPlate
+			door.Color = palette.trim
+			door.Parent = model
+
+			local frame = Instance.new("Part")
+			frame.Name = "DoorFrame"
+			frame.Size = Vector3.new(doorW + 0.8 * scale, 0.4 * scale, 0.15)
+			frame.Position = Vector3.new(centerX + dx, BUILDING_BASE + doorH + 0.2 * scale, faceData.z)
+			frame.Anchored = true
+			frame.CanCollide = false
+			frame.Material = Enum.Material.Neon
+			frame.Color = palette.accent
+			frame:SetAttribute("ThemeRole", "building_neon")
+			frame:SetAttribute("BaseColor", palette.accent)
+			frame:SetAttribute("BaseMaterial", "Neon")
+			frame.Parent = model
+		end
+	end
+
+	-- Windows on all 4 faces (upper floors on front/back, all floors on sides)
+	local litColor = Color3.fromRGB(220, 230, 245)
+	local winW = 3.0 * scale
+	local winH = 2.0 * scale
+	local winGap = 2.0 * scale
+
+	-- Front/back upper floors (skip ground floor — has loading doors)
+	addWindowsToFace(model, "z", centerZ + bodyD / 2 + 0.05, centerX, bodyW, BUILDING_BASE + floorH,
+		floors - 1, floorH, winW, winH, winGap, litColor, 0.5)
+	addWindowsToFace(model, "z", centerZ - bodyD / 2 - 0.05, centerX, bodyW, BUILDING_BASE + floorH,
+		floors - 1, floorH, winW, winH, winGap, litColor, 0.3)
+	-- Side faces (all floors)
+	addWindowsToFace(model, "x", centerX - bodyW / 2 - 0.05, centerZ, bodyD, BUILDING_BASE,
+		floors, floorH, winW, winH, winGap, litColor, 0.4)
+	addWindowsToFace(model, "x", centerX + bodyW / 2 + 0.05, centerZ, bodyD, BUILDING_BASE,
+		floors, floorH, winW, winH, winGap, litColor, 0.4)
+
+	-- Accent strips at roofline (all 4 faces)
+	for _, stripData in ipairs({
+		{ axis = "z", coord = centerZ + bodyD / 2 + 0.05, width = bodyW },
+		{ axis = "z", coord = centerZ - bodyD / 2 - 0.05, width = bodyW },
+		{ axis = "x", coord = centerX + bodyW / 2 + 0.05, width = bodyD },
+		{ axis = "x", coord = centerX - bodyW / 2 - 0.05, width = bodyD },
+	}) do
+		local strip = Instance.new("Part")
+		strip.Name = "RoofStrip"
+		if stripData.axis == "z" then
+			strip.Size = Vector3.new(stripData.width + 0.4 * scale, 0.35 * scale, 0.15)
+			strip.Position = Vector3.new(centerX, BUILDING_BASE + bodyH, stripData.coord)
+		else
+			strip.Size = Vector3.new(0.15, 0.35 * scale, stripData.width + 0.4 * scale)
+			strip.Position = Vector3.new(stripData.coord, BUILDING_BASE + bodyH, centerZ)
+		end
+		strip.Anchored = true
+		strip.CanCollide = false
+		strip.Material = Enum.Material.Neon
+		strip.Color = palette.accent
+		strip:SetAttribute("ThemeRole", "building_neon")
+		strip:SetAttribute("BaseColor", palette.accent)
+		strip:SetAttribute("BaseMaterial", "Neon")
+		strip.Parent = model
+	end
+
+	-- Floor division strips on front face
+	for floor = 1, floors - 1 do
+		local divStrip = Instance.new("Part")
+		divStrip.Name = "FloorDiv"
+		divStrip.Size = Vector3.new(bodyW + 0.2 * scale, 0.25 * scale, 0.15)
+		divStrip.Position = Vector3.new(centerX, BUILDING_BASE + floor * floorH, centerZ + bodyD / 2 + 0.05)
+		divStrip.Anchored = true
+		divStrip.CanCollide = false
+		divStrip.Material = Enum.Material.Metal
+		divStrip.Color = palette.trim
+		divStrip.Parent = model
+	end
+
+	model.PrimaryPart = body
+
+	if options.parent then
+		model.Parent = options.parent
+	end
+
+	return model
+end
+
+function AssetLibrary.getDockPalettes()
+	local names = {}
+	for _, p in ipairs(DOCK_PALETTES) do table.insert(names, p.name) end
+	return names
+end
+
+function AssetLibrary.getDockPaletteCount()
+	return #DOCK_PALETTES
+end
+
 return AssetLibrary
