@@ -719,6 +719,130 @@ local function populateBlocks()
 end
 
 --------------------------------------------------------------------------------
+-- POPULATE COMPOUNDS — landmark buildings in big open zones
+--------------------------------------------------------------------------------
+
+local function populateCompounds()
+	local compoundRects = GTAConfig.getCompoundRects()
+	local folder = DecorUtils.decorFolder
+	local count = 0
+
+	for _, rect in ipairs(compoundRects) do
+		local cx = (rect.x1 + rect.x2) / 2
+		local cz = (rect.z1 + rect.z2) / 2
+		local w = rect.x2 - rect.x1
+		local d = rect.z2 - rect.z1
+
+		--------------------------------------------------------------------
+		-- NUCLEAR
+		--------------------------------------------------------------------
+		if rect.name == "nuclear" then
+			-- Main plant centered in compound
+			local plantModel, animData = AssetLibrary.createNuclearPlant(cx, cz, {
+				parent = folder,
+				scale = 1,
+			})
+
+			-- Perimeter chain-link fence around the compound
+			local fenceH = 5
+			local fenceColor = Color3.fromRGB(130, 130, 135)
+			local postColor = Color3.fromRGB(110, 110, 115)
+			local margin = 5 -- inset from compound edge
+
+			local fx1 = rect.x1 + margin
+			local fx2 = rect.x2 - margin
+			local fz1 = rect.z1 + margin
+			local fz2 = rect.z2 - margin
+
+			-- 4 fence segments
+			local fenceSegments = {
+				{ size = Vector3.new(fx2 - fx1, fenceH, 0.3), pos = Vector3.new(cx, GROUND_Y + fenceH / 2, fz1) },         -- north
+				{ size = Vector3.new(fx2 - fx1, fenceH, 0.3), pos = Vector3.new(cx, GROUND_Y + fenceH / 2, fz2) },         -- south
+				{ size = Vector3.new(0.3, fenceH, fz2 - fz1), pos = Vector3.new(fx1, GROUND_Y + fenceH / 2, cz) },         -- west
+				{ size = Vector3.new(0.3, fenceH, fz2 - fz1), pos = Vector3.new(fx2, GROUND_Y + fenceH / 2, cz) },         -- east
+			}
+			for _, seg in ipairs(fenceSegments) do
+				local fence = Instance.new("Part")
+				fence.Name = "CompoundFence"
+				fence.Size = seg.size
+				fence.Position = seg.pos
+				fence.Anchored = true
+				fence.Material = Enum.Material.Metal
+				fence.Color = fenceColor
+				fence.Transparency = 0.3
+				fence.Parent = folder
+			end
+
+			-- Fence posts along perimeter
+			local postSpacing = 20
+			local function addFencePosts(x1, z1, x2, z2)
+				local dx = x2 - x1
+				local dz = z2 - z1
+				local len = math.sqrt(dx * dx + dz * dz)
+				local numPosts = math.max(2, math.floor(len / postSpacing))
+				for i = 0, numPosts do
+					local t = i / numPosts
+					local post = Instance.new("Part")
+					post.Name = "FencePost"
+					post.Size = Vector3.new(0.5, fenceH + 1, 0.5)
+					post.Position = Vector3.new(
+						x1 + dx * t,
+						GROUND_Y + (fenceH + 1) / 2,
+						z1 + dz * t
+					)
+					post.Anchored = true
+					post.Material = Enum.Material.Metal
+					post.Color = postColor
+					post.Parent = folder
+				end
+			end
+			addFencePosts(fx1, fz1, fx2, fz1)  -- north
+			addFencePosts(fx1, fz2, fx2, fz2)  -- south
+			addFencePosts(fx1, fz1, fx1, fz2)  -- west
+			addFencePosts(fx2, fz1, fx2, fz2)  -- east
+
+			-- Warning signs on fence (all 4 sides)
+			local signW = 8
+			local signH = 2
+			local signDefs = {
+				{ pos = Vector3.new(cx, GROUND_Y + fenceH + signH / 2 + 0.5, fz1), face = "Front" },
+				{ pos = Vector3.new(cx, GROUND_Y + fenceH + signH / 2 + 0.5, fz2), face = "Back" },
+				{ pos = Vector3.new(fx1, GROUND_Y + fenceH + signH / 2 + 0.5, cz), face = "Right" },
+				{ pos = Vector3.new(fx2, GROUND_Y + fenceH + signH / 2 + 0.5, cz), face = "Left" },
+			}
+			for _, sd in ipairs(signDefs) do
+				local isZFace = (sd.face == "Front" or sd.face == "Back")
+				local signPart = Instance.new("Part")
+				signPart.Name = "WarningSign"
+				signPart.Size = isZFace and Vector3.new(signW, signH, 0.3) or Vector3.new(0.3, signH, signW)
+				signPart.Position = sd.pos
+				signPart.Anchored = true
+				signPart.Material = Enum.Material.Neon
+				signPart.Color = Color3.fromRGB(255, 200, 0)
+				signPart.Parent = folder
+
+				local gui = Instance.new("SurfaceGui")
+				gui.Face = Enum.NormalId[sd.face]
+				gui.Parent = signPart
+
+				local lbl = Instance.new("TextLabel")
+				lbl.Size = UDim2.new(1, 0, 1, 0)
+				lbl.BackgroundTransparency = 1
+				lbl.Text = "RESTRICTED AREA"
+				lbl.TextColor3 = Color3.fromRGB(30, 30, 30)
+				lbl.TextScaled = true
+				lbl.Font = Enum.Font.GothamBold
+				lbl.Parent = gui
+			end
+
+			count += 1
+		end
+	end
+
+	print("[CityBuilder] Compounds populated:", count)
+end
+
+--------------------------------------------------------------------------------
 -- PUBLIC API
 --------------------------------------------------------------------------------
 
@@ -739,6 +863,7 @@ function CityBuilder.build(decorFolderRef, vehicleFolderRef, npcFolderRef)
 	RoadNetwork.build()
 	placeTrafficLights()
 	populateBlocks()
+	populateCompounds()
 
 	print("[CityBuilder] === City complete! ===")
 end
