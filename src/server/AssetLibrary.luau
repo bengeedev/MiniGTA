@@ -1991,4 +1991,355 @@ function AssetLibrary.getMansionVariants()
 	return { "mediterranean", "modern" }
 end
 
+--------------------------------------------------------------------------------
+-- SHOP CONSTANTS
+-- Standalone color/material/name pools (inlined from DecorUtils)
+--------------------------------------------------------------------------------
+
+local SHOP_DEPTH = 16
+
+local SHOP_WALL_COLORS = {
+	Color3.fromRGB(200, 190, 170), Color3.fromRGB(180, 170, 155),
+	Color3.fromRGB(165, 120, 90),  Color3.fromRGB(210, 200, 185),
+	Color3.fromRGB(155, 145, 135), Color3.fromRGB(190, 140, 100),
+	Color3.fromRGB(220, 215, 205), Color3.fromRGB(145, 100, 80),
+}
+
+local SHOP_WINDOW_COLORS = {
+	Color3.fromRGB(255, 220, 140), Color3.fromRGB(200, 230, 255),
+	Color3.fromRGB(255, 200, 100), Color3.fromRGB(180, 210, 255),
+	Color3.fromRGB(255, 180, 120),
+}
+
+local SHOP_SIGN_COLORS = {
+	Color3.fromRGB(255, 50, 80),  Color3.fromRGB(50, 200, 255),
+	Color3.fromRGB(255, 100, 200), Color3.fromRGB(50, 180, 50),
+	Color3.fromRGB(255, 200, 50),
+}
+
+local SHOP_SIGN_FONTS = {
+	Enum.Font.GothamBold, Enum.Font.FredokaOne, Enum.Font.Bangers,
+	Enum.Font.LuckiestGuy, Enum.Font.PermanentMarker,
+	Enum.Font.PatrickHand, Enum.Font.Oswald,
+}
+
+local SHOP_NAMES = {
+	"PIZZA", "COFFEE", "DINER", "NOODLES", "BURGERS",
+	"BOOKS", "SHOES", "VINYL", "TOYS", "ARCADE",
+	"NAILS", "BARBER", "SUSHI", "TACOS", "BAKERY",
+	"FLOWERS", "CANDY", "JAZZ", "RECORDS", "COMICS",
+	"ICE CREAM", "LAUNDRY", "DELI", "BAGELS", "DONUTS",
+}
+
+local LUXURY_SHOP_NAMES = {
+	"MAISON", "ATELIER", "NOIR", "LUXE", "BIJOUX",
+	"HAUTE", "GALLERIA", "BONSOIR", "OPALE", "RIVIERA",
+	"LUMIERE", "VELOUR", "PRESTIGE", "PALAZZO", "EDEN",
+}
+
+local LUXURY_WALL_COLORS = {
+	Color3.fromRGB(245, 240, 230), Color3.fromRGB(235, 230, 220),
+	Color3.fromRGB(225, 220, 215), Color3.fromRGB(210, 205, 200),
+	Color3.fromRGB(240, 235, 225),
+}
+
+local LUXURY_SIGN_COLORS = {
+	Color3.fromRGB(180, 155, 80), Color3.fromRGB(30, 30, 30),
+	Color3.fromRGB(25, 25, 50),   Color3.fromRGB(140, 120, 65),
+}
+
+local LUXURY_SIGN_FONTS = { Enum.Font.GothamBold, Enum.Font.Oswald }
+
+local LUXURY_WINDOW_COLORS = {
+	Color3.fromRGB(255, 240, 200), Color3.fromRGB(255, 230, 180),
+	Color3.fromRGB(240, 235, 220),
+}
+
+local function pickRandom(t)
+	return t[math.random(1, #t)]
+end
+
+--------------------------------------------------------------------------------
+-- createShop(centerX, centerZ, options)
+-- A single 2-floor shop unit: glass storefront, interior, awning, neon sign, roof.
+-- All 4 faces rendered (glass front on +Z, back wall, two side walls).
+-- options.variant: "standard" or "luxury" (default "standard")
+-- options.facadeWidth: facade length in studs (default random 16-26)
+-- options.scale: number (default 1)
+-- options.shopName: string (default random from pool)
+-- options.parent: Instance to parent to
+-- Returns: Model
+--------------------------------------------------------------------------------
+
+function AssetLibrary.createShop(centerX, centerZ, options)
+	options = options or {}
+	local variant = options.variant or "standard"
+	local scale = options.scale or 1
+	local isLuxury = variant == "luxury"
+
+	local wallColors = isLuxury and LUXURY_WALL_COLORS or SHOP_WALL_COLORS
+	local signColors = isLuxury and LUXURY_SIGN_COLORS or SHOP_SIGN_COLORS
+	local signFonts = isLuxury and LUXURY_SIGN_FONTS or SHOP_SIGN_FONTS
+	local windowColors = isLuxury and LUXURY_WINDOW_COLORS or SHOP_WINDOW_COLORS
+	local nameList = isLuxury and LUXURY_SHOP_NAMES or SHOP_NAMES
+	local wallMaterial = isLuxury and Enum.Material.SmoothPlastic or Enum.Material.Brick
+	local awningMaterial = isLuxury and Enum.Material.SmoothPlastic or Enum.Material.Fabric
+	local floorColor = isLuxury and Color3.fromRGB(240, 235, 225) or Color3.fromRGB(180, 160, 130)
+	local ceilingColor = isLuxury and Color3.fromRGB(255, 245, 225) or Color3.fromRGB(255, 240, 210)
+	local roofColor = isLuxury and Color3.fromRGB(30, 30, 35) or Color3.fromRGB(40, 40, 45)
+
+	local facadeLen = options.facadeWidth and (options.facadeWidth * scale) or (math.random(16, 26) * scale)
+	local bDepth = SHOP_DEPTH * scale
+	local floorHeight = 10 * scale
+	local floors = 2
+	local height = floors * floorHeight
+
+	local wallColor = pickRandom(wallColors)
+	local signColor = pickRandom(signColors)
+
+	-- Body dimensions: facade along X, depth along Z
+	local W = facadeLen   -- width along X
+	local D = bDepth      -- depth along Z
+
+	local building = Instance.new("Model")
+	building.Name = "Building_Shop"
+
+	-- ── BACK WALL (-Z) ───────────────────────────────────────────────────
+	local back = Instance.new("Part")
+	back.Name = "BackWall"
+	back.Size = Vector3.new(W, height, 0.5)
+	back.Position = Vector3.new(centerX, BUILDING_BASE + height / 2, centerZ - D / 2)
+	back.Anchored = true
+	back.Material = wallMaterial
+	back.Color = wallColor
+	back:SetAttribute("ThemeRole", "shop_wall")
+	back:SetAttribute("BaseColor", wallColor)
+	back:SetAttribute("BaseMaterial", wallMaterial.Name)
+	back.Parent = building
+
+	-- ── SIDE WALLS ────────────────────────────────────────────────────────
+	for _, s in ipairs({ -1, 1 }) do
+		local side = Instance.new("Part")
+		side.Name = "SideWall"
+		side.Size = Vector3.new(0.5, height, D)
+		side.Position = Vector3.new(centerX + s * W / 2, BUILDING_BASE + height / 2, centerZ)
+		side.Anchored = true
+		side.Material = wallMaterial
+		side.Color = wallColor
+		side:SetAttribute("ThemeRole", "shop_wall")
+		side:SetAttribute("BaseColor", wallColor)
+		side:SetAttribute("BaseMaterial", wallMaterial.Name)
+		side.Parent = building
+	end
+
+	-- ── UPPER FRONT WALL (+Z, 2nd floor above glass) ─────────────────────
+	local upperFrontH = height - floorHeight
+	local frontZ = centerZ + D / 2 + 0.2
+	local upperFront = Instance.new("Part")
+	upperFront.Name = "UpperFrontWall"
+	upperFront.Size = Vector3.new(W, upperFrontH, 0.5)
+	upperFront.Position = Vector3.new(centerX, BUILDING_BASE + floorHeight + upperFrontH / 2, frontZ)
+	upperFront.Anchored = true
+	upperFront.Material = wallMaterial
+	upperFront.Color = wallColor
+	upperFront:SetAttribute("ThemeRole", "shop_wall")
+	upperFront:SetAttribute("BaseColor", wallColor)
+	upperFront:SetAttribute("BaseMaterial", wallMaterial.Name)
+	upperFront.Parent = building
+
+	-- ── GLASS STOREFRONT (+Z face, ground floor) ──────────────────────────
+	local glassHeight = floorHeight * 0.92
+	local glassY = BUILDING_BASE + glassHeight / 2 + 0.2
+	local glass = Instance.new("Part")
+	glass.Name = "StorefrontGlass"
+	glass.Size = Vector3.new(W * 0.95, glassHeight, 0.3)
+	glass.Position = Vector3.new(centerX, glassY, frontZ)
+	glass.Anchored = true
+	glass.CanCollide = true
+	glass.Material = Enum.Material.Glass
+	glass.Color = isLuxury and Color3.fromRGB(220, 235, 255) or Color3.fromRGB(200, 230, 255)
+	glass.Transparency = 0.65
+	glass:SetAttribute("ThemeRole", "shop_glass")
+	glass:SetAttribute("BaseColor", glass.Color)
+	glass.Parent = building
+
+	-- Mullions
+	local numMullions = 4
+	local mullionSpacing = (W * 0.95) / (numMullions + 1)
+	for m = 1, numMullions do
+		local mullion = Instance.new("Part")
+		mullion.Name = "Mullion"
+		mullion.Size = Vector3.new(0.15, glassHeight, 0.15)
+		mullion.Position = Vector3.new(centerX - (W * 0.95) / 2 + m * mullionSpacing, glassY, frontZ + 0.1)
+		mullion.Anchored = true
+		mullion.CanCollide = false
+		mullion.Material = Enum.Material.Metal
+		mullion.Color = Color3.fromRGB(120, 120, 125)
+		mullion:SetAttribute("ThemeRole", "shop_mullion")
+		mullion:SetAttribute("BaseColor", mullion.Color)
+		mullion.Parent = building
+	end
+
+	-- ── INTERIOR ──────────────────────────────────────────────────────────
+	local interiorFloor = Instance.new("Part")
+	interiorFloor.Name = "InteriorFloor"
+	interiorFloor.Size = Vector3.new(W * 0.9, 0.3, D * 0.8)
+	interiorFloor.Position = Vector3.new(centerX, BUILDING_BASE + 0.15, centerZ)
+	interiorFloor.Anchored = true
+	interiorFloor.CanCollide = false
+	interiorFloor.Material = Enum.Material.SmoothPlastic
+	interiorFloor.Color = floorColor
+	interiorFloor:SetAttribute("ThemeRole", "shop_floor")
+	interiorFloor:SetAttribute("BaseColor", floorColor)
+	interiorFloor.Parent = building
+
+	local ceilingLight = Instance.new("Part")
+	ceilingLight.Name = "CeilingLight"
+	ceilingLight.Size = Vector3.new(W * 0.6, 0.3, D * 0.4)
+	ceilingLight.Position = Vector3.new(centerX, BUILDING_BASE + floorHeight - 0.3, centerZ)
+	ceilingLight.Anchored = true
+	ceilingLight.CanCollide = false
+	ceilingLight.Material = Enum.Material.Neon
+	ceilingLight.Color = ceilingColor
+	ceilingLight:SetAttribute("ThemeRole", "shop_ceiling")
+	ceilingLight:SetAttribute("BaseColor", ceilingColor)
+	ceilingLight.Parent = building
+
+	local shopLight = Instance.new("PointLight")
+	shopLight.Color = isLuxury and Color3.fromRGB(255, 245, 220) or Color3.fromRGB(255, 230, 180)
+	shopLight.Brightness = 0.5
+	shopLight.Range = 12
+	shopLight:SetAttribute("ThemeRole", "shop_shoplight")
+	shopLight:SetAttribute("BaseColor", shopLight.Color)
+	shopLight.Parent = ceilingLight
+
+	local interiorBack = Instance.new("Part")
+	interiorBack.Name = "InteriorBackWall"
+	interiorBack.Size = Vector3.new(W * 0.7, floorHeight * 0.7, 0.3)
+	interiorBack.Position = Vector3.new(centerX, BUILDING_BASE + floorHeight * 0.4, centerZ - D * 0.35)
+	interiorBack.Anchored = true
+	interiorBack.CanCollide = false
+	interiorBack.Material = Enum.Material.SmoothPlastic
+	interiorBack.Color = pickRandom(wallColors)
+	interiorBack:SetAttribute("ThemeRole", "shop_wall")
+	interiorBack:SetAttribute("BaseColor", interiorBack.Color)
+	interiorBack:SetAttribute("BaseMaterial", Enum.Material.SmoothPlastic.Name)
+	interiorBack.Parent = building
+
+	-- ── AWNING (+Z face) ──────────────────────────────────────────────────
+	local awning = Instance.new("Part")
+	awning.Name = "Awning"
+	awning.Size = Vector3.new(W * 0.9, 0.4, 3 * scale)
+	awning.Position = Vector3.new(centerX, BUILDING_BASE + floorHeight - 0.5, frontZ + 1.5 * scale)
+	awning.Anchored = true
+	awning.Material = awningMaterial
+	awning.Color = signColor
+	awning:SetAttribute("ThemeRole", "shop_awning")
+	awning:SetAttribute("BaseColor", signColor)
+	awning:SetAttribute("BaseMaterial", awningMaterial.Name)
+	awning.Parent = building
+
+	-- ── SECOND FLOOR WINDOWS (front +Z) ───────────────────────────────────
+	local upWinW = 2.5 * scale
+	local upWinH = 3 * scale
+	local upWinY = BUILDING_BASE + floorHeight + floorHeight * 0.45
+	local numUpWin = math.floor(W / (upWinW + 2))
+	local totalUpW = numUpWin * upWinW + (numUpWin - 1) * 2
+	local startOff = -totalUpW / 2 + upWinW / 2
+
+	for w = 1, numUpWin do
+		local off = startOff + (w - 1) * (upWinW + 2)
+		local win = Instance.new("Part")
+		win.Name = "UpperWindow"
+		win.Size = Vector3.new(upWinW, upWinH, 0.3)
+		win.Position = Vector3.new(centerX + off, upWinY, frontZ)
+		win.Anchored = true
+		win.CanCollide = false
+		if math.random() < 0.5 then
+			win.Material = Enum.Material.Neon
+			win.Color = pickRandom(windowColors)
+			win:SetAttribute("ThemeRole", "shop_window")
+			win:SetAttribute("BaseColor", win.Color)
+		else
+			win.Material = Enum.Material.Glass
+			win.Color = Color3.fromRGB(80, 120, 160)
+			win:SetAttribute("ThemeRole", "shop_darkwindow")
+			win:SetAttribute("BaseColor", win.Color)
+		end
+		win.Parent = building
+	end
+
+	-- ── BACK FACE WINDOWS (-Z, dimmer) ────────────────────────────────────
+	for w = 1, math.max(1, numUpWin - 1) do
+		local off = startOff + (w - 1) * (upWinW + 2)
+		local win = Instance.new("Part")
+		win.Name = "BackWindow"
+		win.Size = Vector3.new(upWinW, upWinH, 0.3)
+		win.Position = Vector3.new(centerX + off, upWinY, centerZ - D / 2 - 0.2)
+		win.Anchored = true
+		win.CanCollide = false
+		win.Material = Enum.Material.Glass
+		win.Color = Color3.fromRGB(60, 80, 100)
+		win:SetAttribute("ThemeRole", "shop_darkwindow")
+		win:SetAttribute("BaseColor", win.Color)
+		win.Parent = building
+	end
+
+	-- ── NEON SIGN (front +Z, above storefront) ───────────────────────────
+	local shopName = options.shopName or pickRandom(nameList)
+	local signH = 2.5 * scale
+	local signW = W * 0.6
+	local neonSign = Instance.new("Part")
+	neonSign.Name = "NeonSign"
+	neonSign.Size = Vector3.new(signW, signH, 0.4)
+	neonSign.Position = Vector3.new(centerX, BUILDING_BASE + floorHeight + signH / 2 + 0.5, frontZ + 0.3)
+	neonSign.Anchored = true
+	neonSign.CanCollide = false
+	neonSign.Material = Enum.Material.Neon
+	neonSign.Color = signColor
+	neonSign:SetAttribute("ThemeRole", "shop_sign")
+	neonSign:SetAttribute("BaseColor", signColor)
+	neonSign.Parent = building
+
+	local gui = Instance.new("SurfaceGui")
+	gui.Name = "SignGui"
+	gui.Face = Enum.NormalId.Back
+	gui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
+	gui.PixelsPerStud = 50
+	gui.Parent = neonSign
+
+	local label = Instance.new("TextLabel")
+	label.Name = "ShopName"
+	label.Size = UDim2.new(1, 0, 1, 0)
+	label.BackgroundTransparency = 1
+	label.Text = shopName
+	label.TextColor3 = Color3.new(1, 1, 1)
+	label.TextScaled = true
+	label.Font = pickRandom(signFonts)
+	label:SetAttribute("ThemeRole", "shop_signtext")
+	label.Parent = gui
+
+	-- ── ROOF ──────────────────────────────────────────────────────────────
+	local roof = Instance.new("Part")
+	roof.Name = "Roof"
+	roof.Size = Vector3.new(W + 0.5, 0.5, D + 0.5)
+	roof.Position = Vector3.new(centerX, BUILDING_BASE + height + 0.25, centerZ)
+	roof.Anchored = true
+	roof.Material = Enum.Material.Metal
+	roof.Color = roofColor
+	roof:SetAttribute("ThemeRole", "shop_roof")
+	roof:SetAttribute("BaseColor", roofColor)
+	roof.Parent = building
+
+	if options.parent then
+		building.Parent = options.parent
+	end
+
+	return building
+end
+
+function AssetLibrary.getShopVariants()
+	return { "standard", "luxury" }
+end
+
 return AssetLibrary
