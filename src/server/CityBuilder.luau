@@ -683,37 +683,143 @@ local function populateBlocks()
 			if usableW < 20 or usableD < 20 then continue end
 
 			----------------------------------------------------------------
-			-- DOWNTOWN: skyscrapers
+			-- DOWNTOWN: skyscrapers + offices + glass cube stores
 			----------------------------------------------------------------
 			if dist == "downtown" then
-				local styles = { "glass", "glass", "warm", "neon" } -- weighted toward glass
-				local bDepth = 20  -- base depth per skyscraper
+				-- Mix building types: 60% skyscrapers, 20% office towers, 20% glass cube
+				local roll = math.random()
 
-				-- How many skyscrapers fit along X?
-				local gap = 2
-				local numX = math.max(1, math.floor((usableW + gap) / (bDepth + gap)))
-				local totalW = numX * bDepth + (numX - 1) * gap
-				local startX = blockCX - totalW / 2 + bDepth / 2
-
-				for bx = 1, numX do
-					local cx = startX + (bx - 1) * (bDepth + gap)
-					local style = styles[math.random(1, #styles)]
-					local specIdx = math.random(1, AssetLibrary.getSkyscraperCount(style))
-
-					AssetLibrary.createSkyscraper(cx, bandCZ, {
-						style = style,
-						specIndex = specIdx,
+				if roll < 0.20 and usableW >= 36 then
+					-- Glass cube store (36×36 footprint)
+					AssetLibrary.createGlassCubeStore(blockCX, bandCZ, {
 						scale = 1,
-						depth = bDepth,
 						parent = DecorUtils.decorFolder,
 					})
 					buildingCount += 1
+
+				elseif roll < 0.40 then
+					-- Office tower(s)
+					local bDepth = 16
+					local gap = 2
+					local numX = math.max(1, math.floor((usableW + gap) / (bDepth + gap)))
+					numX = math.min(numX, 3) -- cap at 3
+					local totalW = numX * bDepth + (numX - 1) * gap
+					local startX = blockCX - totalW / 2 + bDepth / 2
+
+					for bx = 1, numX do
+						local cx = startX + (bx - 1) * (bDepth + gap)
+						AssetLibrary.createOffice(cx, bandCZ, {
+							variant = "tower",
+							scale = 1,
+							parent = DecorUtils.decorFolder,
+						})
+						buildingCount += 1
+					end
+				else
+					-- Skyscrapers (main downtown look)
+					local styles = { "glass", "glass", "warm", "neon" }
+					local bDepth = 20
+					local gap = 2
+					local numX = math.max(1, math.floor((usableW + gap) / (bDepth + gap)))
+					local totalW = numX * bDepth + (numX - 1) * gap
+					local startX = blockCX - totalW / 2 + bDepth / 2
+
+					for bx = 1, numX do
+						local cx = startX + (bx - 1) * (bDepth + gap)
+						local style = styles[math.random(1, #styles)]
+						local specIdx = math.random(1, AssetLibrary.getSkyscraperCount(style))
+
+						AssetLibrary.createSkyscraper(cx, bandCZ, {
+							style = style,
+							specIndex = specIdx,
+							scale = 1,
+							depth = bDepth,
+							parent = DecorUtils.decorFolder,
+						})
+						buildingCount += 1
+					end
+				end
+
+			----------------------------------------------------------------
+			-- COMMERCIAL: shops + parking garages + hood buildings
+			----------------------------------------------------------------
+			elseif dist == "commercial" then
+				local roll = math.random()
+
+				if roll < 0.15 and usableW >= 40 then
+					-- Parking garage (40×34 footprint)
+					AssetLibrary.createParkingGarage(blockCX, bandCZ, {
+						scale = 1,
+						parent = DecorUtils.decorFolder,
+					})
+					buildingCount += 1
+
+				elseif roll < 0.30 and usableW >= 36 then
+					-- Glass cube store
+					AssetLibrary.createGlassCubeStore(blockCX, bandCZ, {
+						scale = 1,
+						parent = DecorUtils.decorFolder,
+					})
+					buildingCount += 1
+
+				else
+					-- Row of shops / hood buildings along the block
+					local bDepth = 16 -- shop depth
+					local gap = 1
+					local numX = math.max(1, math.floor((usableW + gap) / (20 + gap)))
+					numX = math.min(numX, 5)
+					local facadeW = math.min(24, math.floor(usableW / numX) - gap)
+					local totalW = numX * facadeW + (numX - 1) * gap
+					local startX = blockCX - totalW / 2 + facadeW / 2
+
+					for bx = 1, numX do
+						local cx = startX + (bx - 1) * (facadeW + gap)
+						local shopRoll = math.random()
+
+						if shopRoll < 0.35 then
+							-- Hood building (shop + apartment floors)
+							AssetLibrary.createHoodBuilding(cx, bandCZ, {
+								facadeWidth = facadeW,
+								scale = 1,
+								parent = DecorUtils.decorFolder,
+							})
+						elseif shopRoll < 0.55 then
+							-- Luxury shop
+							AssetLibrary.createShop(cx, bandCZ, {
+								variant = "luxury",
+								facadeWidth = facadeW,
+								scale = 1,
+								parent = DecorUtils.decorFolder,
+							})
+						else
+							-- Standard shop
+							AssetLibrary.createShop(cx, bandCZ, {
+								variant = "standard",
+								facadeWidth = facadeW,
+								scale = 1,
+								parent = DecorUtils.decorFolder,
+							})
+						end
+						buildingCount += 1
+					end
 				end
 			end
-
-			-- (other districts will be added as we extract more assets)
 		end
 	end
+
+	-- TRAIN STATION — landmark at the railway, downtown side
+	-- Railway at row 3, z = ORIGIN_Z + 3 * CELL = -360, width 40
+	-- Place station just south of railway (in downtown territory)
+	local railwayZ = GTAConfig.getRowEdgeZ(3) -- center of railway lane
+	local railwayHalfW = getLaneWidth("railway") / 2 -- 20
+	local stationZ = railwayZ + railwayHalfW + 35 -- 35 studs south of railway edge (station centered)
+	-- Downtown center X: between col edges 4 and 6 → col 5 center
+	local stationX = GTAConfig.getColEdgeX(5) -- center of downtown
+	AssetLibrary.createTrainStation(stationX, stationZ, {
+		scale = 1,
+		parent = DecorUtils.decorFolder,
+	})
+	buildingCount += 1
 
 	print("[CityBuilder] Buildings placed:", buildingCount)
 end
