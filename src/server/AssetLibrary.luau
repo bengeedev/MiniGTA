@@ -6038,6 +6038,7 @@ end
 function AssetLibrary.createNuclearPlant(centerX, centerZ, options)
 	options = options or {}
 	local scale = options.scale or 1
+	local baseY = options.baseY or BUILDING_BASE
 
 	local SPECS = {
 		{ domeColor = Color3.fromRGB(200, 200, 205), signText = "NUCLEAR ENERGY",  signColor = Color3.fromRGB(255, 180, 60), towerSpread = 16 },
@@ -6058,7 +6059,7 @@ function AssetLibrary.createNuclearPlant(centerX, centerZ, options)
 	local reactor = Instance.new("Part")
 	reactor.Name = "ReactorBuilding"
 	reactor.Size = Vector3.new(reactorW, reactorH, reactorD)
-	reactor.Position = Vector3.new(centerX, BUILDING_BASE + reactorH / 2, centerZ)
+	reactor.Position = Vector3.new(centerX, baseY + reactorH / 2, centerZ)
 	reactor.Anchored = true
 	reactor.Material = Enum.Material.Concrete
 	reactor.Color = Color3.fromRGB(195, 195, 200)
@@ -6074,7 +6075,7 @@ function AssetLibrary.createNuclearPlant(centerX, centerZ, options)
 			local col = Instance.new("Part")
 			col.Name = "ReactorColumn"
 			col.Size = Vector3.new(colW, colH, colW)
-			col.Position = Vector3.new(centerX + ox, BUILDING_BASE + colH / 2, centerZ + oz)
+			col.Position = Vector3.new(centerX + ox, baseY + colH / 2, centerZ + oz)
 			col.Anchored = true
 			col.Material = Enum.Material.Concrete
 			col.Color = Color3.fromRGB(180, 180, 185)
@@ -6090,7 +6091,7 @@ function AssetLibrary.createNuclearPlant(centerX, centerZ, options)
 			stripe.Size = Vector3.new(colW + 0.1, 0.8 * scale, colW + 0.1)
 			stripe.Position = Vector3.new(
 				centerX + halfRW,
-				BUILDING_BASE + 2 * scale + band * 2.5 * scale,
+				baseY + 2 * scale + band * 2.5 * scale,
 				centerZ + oz
 			)
 			stripe.Anchored = true
@@ -6107,7 +6108,7 @@ function AssetLibrary.createNuclearPlant(centerX, centerZ, options)
 	dome.Name = "ReactorDome"
 	dome.Shape = Enum.PartType.Ball
 	dome.Size = Vector3.new(domeDiam, domeDiam, domeDiam)
-	dome.Position = Vector3.new(centerX, BUILDING_BASE + reactorH, centerZ)
+	dome.Position = Vector3.new(centerX, baseY + reactorH, centerZ)
 	dome.Anchored = true
 	dome.Material = Enum.Material.SmoothPlastic
 	dome.Color = spec.domeColor
@@ -6118,7 +6119,7 @@ function AssetLibrary.createNuclearPlant(centerX, centerZ, options)
 	---------------------------------------------------------------------------
 	local towerDiam = 12 * scale
 	local towerH = 30 * scale
-	local towerTopY = BUILDING_BASE + towerH / 2
+	local towerTopY = baseY + towerH / 2
 	local towerSpread = spec.towerSpread * scale
 
 	for _, side in ipairs({ -1, 1 }) do
@@ -6142,7 +6143,7 @@ function AssetLibrary.createNuclearPlant(centerX, centerZ, options)
 		rim.Name = "TowerRim"
 		rim.Shape = Enum.PartType.Cylinder
 		rim.Size = Vector3.new(rimH, rimDiam, rimDiam)
-		rim.CFrame = CFrame.new(tx, BUILDING_BASE + towerH - rimH / 2, tz) * CFrame.Angles(0, 0, math.rad(90))
+		rim.CFrame = CFrame.new(tx, baseY + towerH - rimH / 2, tz) * CFrame.Angles(0, 0, math.rad(90))
 		rim.Anchored = true
 		rim.Material = Enum.Material.Concrete
 		rim.Color = Color3.fromRGB(200, 200, 205)
@@ -6155,7 +6156,7 @@ function AssetLibrary.createNuclearPlant(centerX, centerZ, options)
 		glowRing.Name = "TowerGlowRing"
 		glowRing.Shape = Enum.PartType.Cylinder
 		glowRing.Size = Vector3.new(glowRingH, glowRingDiam, glowRingDiam)
-		glowRing.CFrame = CFrame.new(tx, BUILDING_BASE + towerH * 0.6, tz) * CFrame.Angles(0, 0, math.rad(90))
+		glowRing.CFrame = CFrame.new(tx, baseY + towerH * 0.6, tz) * CFrame.Angles(0, 0, math.rad(90))
 		glowRing.Anchored = true
 		glowRing.CanCollide = false
 		glowRing.Material = Enum.Material.Neon
@@ -6172,7 +6173,7 @@ function AssetLibrary.createNuclearPlant(centerX, centerZ, options)
 		local steamPoint = Instance.new("Part")
 		steamPoint.Name = "SteamPoint"
 		steamPoint.Size = Vector3.new(1, 1, 1)
-		steamPoint.Position = Vector3.new(tx, BUILDING_BASE + towerH + 1, tz)
+		steamPoint.Position = Vector3.new(tx, baseY + towerH + 1, tz)
 		steamPoint.Anchored = true
 		steamPoint.CanCollide = false
 		steamPoint.Transparency = 1
@@ -6195,7 +6196,7 @@ function AssetLibrary.createNuclearPlant(centerX, centerZ, options)
 		local pipeLen = math.abs(towerSpread) - towerDiam / 2 - reactorD / 2
 		if pipeLen > 0 then
 			local pipeDiam = 2.5 * scale
-			local pipeY = BUILDING_BASE + 10 * scale
+			local pipeY = baseY + 10 * scale
 			local pipeZ = centerZ + side * (reactorD / 2 + pipeLen / 2)
 
 			local pipe = Instance.new("Part")
@@ -6221,7 +6222,7 @@ function AssetLibrary.createNuclearPlant(centerX, centerZ, options)
 	local turbine = Instance.new("Part")
 	turbine.Name = "TurbineHall"
 	turbine.Size = Vector3.new(turbW, turbH, turbD)
-	turbine.Position = Vector3.new(turbX, BUILDING_BASE + turbH / 2, centerZ)
+	turbine.Position = Vector3.new(turbX, baseY + turbH / 2, centerZ)
 	turbine.Anchored = true
 	turbine.Material = Enum.Material.Concrete
 	turbine.Color = Color3.fromRGB(160, 160, 165)
@@ -6234,7 +6235,7 @@ function AssetLibrary.createNuclearPlant(centerX, centerZ, options)
 	local door = Instance.new("Part")
 	door.Name = "RadiationDoor"
 	door.Size = Vector3.new(10 * scale, 8 * scale, 0.3 * scale)
-	door.Position = Vector3.new(centerX, BUILDING_BASE + 4 * scale, doorFaceZ)
+	door.Position = Vector3.new(centerX, baseY + 4 * scale, doorFaceZ)
 	door.Anchored = true
 	door.Material = Enum.Material.SmoothPlastic
 	door.Color = Color3.fromRGB(220, 190, 0)
@@ -6245,7 +6246,7 @@ function AssetLibrary.createNuclearPlant(centerX, centerZ, options)
 	local signR = 3.0 * scale
 	local neonThick = 0.3 * scale
 	local radCZ2 = doorFaceZ + 0.2
-	local radCY = BUILDING_BASE + 12 * scale
+	local radCY = baseY + 12 * scale
 
 	-- Green neon border ring
 	local borderRing = Instance.new("Part")
@@ -6342,7 +6343,7 @@ function AssetLibrary.createNuclearPlant(centerX, centerZ, options)
 		local strip = Instance.new("Part")
 		strip.Name = "HazardStrip"
 		strip.Size = Vector3.new(9 * scale, 0.6 * scale, 0.35 * scale)
-		strip.Position = Vector3.new(centerX + hOff, BUILDING_BASE + 8.3 * scale, doorFaceZ + 0.05)
+		strip.Position = Vector3.new(centerX + hOff, baseY + 8.3 * scale, doorFaceZ + 0.05)
 		strip.Anchored = true
 		strip.CanCollide = false
 		strip.Material = Enum.Material.Neon
@@ -6356,7 +6357,7 @@ function AssetLibrary.createNuclearPlant(centerX, centerZ, options)
 	local signW2 = 12 * scale
 	local signH2 = 3 * scale
 	local signZ2 = centerZ + reactorD / 2 + 0.3
-	local signY2 = BUILDING_BASE + reactorH - 4 * scale
+	local signY2 = baseY + reactorH - 4 * scale
 
 	local signPart = Instance.new("Part")
 	signPart.Name = "NuclearSign"
@@ -6395,7 +6396,7 @@ function AssetLibrary.createNuclearPlant(centerX, centerZ, options)
 	local barrier = Instance.new("Part")
 	barrier.Name = "SecurityBarrier"
 	barrier.Size = Vector3.new(barrierD, barrierH, 0.5 * scale)
-	barrier.Position = Vector3.new(centerX, BUILDING_BASE + barrierH / 2, centerZ + reactorD / 2 + 4 * scale)
+	barrier.Position = Vector3.new(centerX, baseY + barrierH / 2, centerZ + reactorD / 2 + 4 * scale)
 	barrier.Anchored = true
 	barrier.Material = Enum.Material.Metal
 	barrier.Color = Color3.fromRGB(100, 100, 105)

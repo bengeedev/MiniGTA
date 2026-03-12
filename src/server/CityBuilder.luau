@@ -737,10 +737,25 @@ local function populateCompounds()
 		-- NUCLEAR
 		--------------------------------------------------------------------
 		if rect.name == "nuclear" then
+			-- Concrete pad over bumpy terrain so buildings don't sink
+			local padH = 1
+			local padY = GROUND_Y + 2  -- raised above terrain voxel surface
+			local pad = Instance.new("Part")
+			pad.Name = "CompoundPad"
+			pad.Size = Vector3.new(w - 4, padH, d - 4)
+			pad.Position = Vector3.new(cx, padY + padH / 2, cz)
+			pad.Anchored = true
+			pad.Material = Enum.Material.Concrete
+			pad.Color = Color3.fromRGB(80, 85, 80)
+			pad.Parent = folder
+
+			local baseY = padY + padH  -- top of pad = building base
+
 			-- Main plant centered in compound
 			local plantModel, animData = AssetLibrary.createNuclearPlant(cx, cz, {
 				parent = folder,
 				scale = 1,
+				baseY = baseY,
 			})
 
 			-- Perimeter chain-link fence around the compound
@@ -756,10 +771,10 @@ local function populateCompounds()
 
 			-- 4 fence segments
 			local fenceSegments = {
-				{ size = Vector3.new(fx2 - fx1, fenceH, 0.3), pos = Vector3.new(cx, GROUND_Y + fenceH / 2, fz1) },         -- north
-				{ size = Vector3.new(fx2 - fx1, fenceH, 0.3), pos = Vector3.new(cx, GROUND_Y + fenceH / 2, fz2) },         -- south
-				{ size = Vector3.new(0.3, fenceH, fz2 - fz1), pos = Vector3.new(fx1, GROUND_Y + fenceH / 2, cz) },         -- west
-				{ size = Vector3.new(0.3, fenceH, fz2 - fz1), pos = Vector3.new(fx2, GROUND_Y + fenceH / 2, cz) },         -- east
+				{ size = Vector3.new(fx2 - fx1, fenceH, 0.3), pos = Vector3.new(cx, baseY + fenceH / 2, fz1) },         -- north
+				{ size = Vector3.new(fx2 - fx1, fenceH, 0.3), pos = Vector3.new(cx, baseY + fenceH / 2, fz2) },         -- south
+				{ size = Vector3.new(0.3, fenceH, fz2 - fz1), pos = Vector3.new(fx1, baseY + fenceH / 2, cz) },         -- west
+				{ size = Vector3.new(0.3, fenceH, fz2 - fz1), pos = Vector3.new(fx2, baseY + fenceH / 2, cz) },         -- east
 			}
 			for _, seg in ipairs(fenceSegments) do
 				local fence = Instance.new("Part")
@@ -787,7 +802,7 @@ local function populateCompounds()
 					post.Size = Vector3.new(0.5, fenceH + 1, 0.5)
 					post.Position = Vector3.new(
 						x1 + dx * t,
-						GROUND_Y + (fenceH + 1) / 2,
+						baseY + (fenceH + 1) / 2,
 						z1 + dz * t
 					)
 					post.Anchored = true
@@ -805,10 +820,10 @@ local function populateCompounds()
 			local signW = 8
 			local signH = 2
 			local signDefs = {
-				{ pos = Vector3.new(cx, GROUND_Y + fenceH + signH / 2 + 0.5, fz1), face = "Front" },
-				{ pos = Vector3.new(cx, GROUND_Y + fenceH + signH / 2 + 0.5, fz2), face = "Back" },
-				{ pos = Vector3.new(fx1, GROUND_Y + fenceH + signH / 2 + 0.5, cz), face = "Right" },
-				{ pos = Vector3.new(fx2, GROUND_Y + fenceH + signH / 2 + 0.5, cz), face = "Left" },
+				{ pos = Vector3.new(cx, baseY + fenceH + signH / 2 + 0.5, fz1), face = "Front" },
+				{ pos = Vector3.new(cx, baseY + fenceH + signH / 2 + 0.5, fz2), face = "Back" },
+				{ pos = Vector3.new(fx1, baseY + fenceH + signH / 2 + 0.5, cz), face = "Right" },
+				{ pos = Vector3.new(fx2, baseY + fenceH + signH / 2 + 0.5, cz), face = "Left" },
 			}
 			for _, sd in ipairs(signDefs) do
 				local isZFace = (sd.face == "Front" or sd.face == "Back")
