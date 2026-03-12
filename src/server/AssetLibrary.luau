@@ -6027,4 +6027,392 @@ function AssetLibrary.createCommandCenter(centerX, centerZ, options)
 	}
 end
 
+--------------------------------------------------------------------------------
+-- NUCLEAR PLANT
+-- Reactor containment building with dome, 2 cooling towers with green steam,
+-- turbine hall, radiation trefoil sign, "DANGER" neon, hazard stripes,
+-- security barrier. Returns animation data for radiation pulse.
+-- Options: parent, scale, variant (1 or 2)
+--------------------------------------------------------------------------------
+
+function AssetLibrary.createNuclearPlant(centerX, centerZ, options)
+	options = options or {}
+	local scale = options.scale or 1
+
+	local SPECS = {
+		{ domeColor = Color3.fromRGB(200, 200, 205), signText = "NUCLEAR ENERGY",  signColor = Color3.fromRGB(255, 180, 60), towerSpread = 16 },
+		{ domeColor = Color3.fromRGB(190, 195, 205), signText = "POWER STATION",   signColor = Color3.fromRGB(60, 200, 255), towerSpread = 12 },
+	}
+	local spec = SPECS[options.variant or math.random(1, 2)]
+
+	local model = Instance.new("Model")
+	model.Name = "NuclearPlant"
+
+	local reactorW = 20 * scale
+	local reactorH = 24 * scale
+	local reactorD = 20 * scale
+
+	---------------------------------------------------------------------------
+	-- REACTOR BUILDING (main containment structure)
+	---------------------------------------------------------------------------
+	local reactor = Instance.new("Part")
+	reactor.Name = "ReactorBuilding"
+	reactor.Size = Vector3.new(reactorW, reactorH, reactorD)
+	reactor.Position = Vector3.new(centerX, BUILDING_BASE + reactorH / 2, centerZ)
+	reactor.Anchored = true
+	reactor.Material = Enum.Material.Concrete
+	reactor.Color = Color3.fromRGB(195, 195, 200)
+	reactor.Parent = model
+
+	-- 4 corner columns
+	local colW = 1.2 * scale
+	local colH = 25 * scale
+	local halfRW = reactorW / 2 - colW / 2
+	local halfRD = reactorD / 2 - colW / 2
+	for _, ox in ipairs({ -halfRW, halfRW }) do
+		for _, oz in ipairs({ -halfRD, halfRD }) do
+			local col = Instance.new("Part")
+			col.Name = "ReactorColumn"
+			col.Size = Vector3.new(colW, colH, colW)
+			col.Position = Vector3.new(centerX + ox, BUILDING_BASE + colH / 2, centerZ + oz)
+			col.Anchored = true
+			col.Material = Enum.Material.Concrete
+			col.Color = Color3.fromRGB(180, 180, 185)
+			col.Parent = model
+		end
+	end
+
+	-- Hazard stripes on front (+Z) columns
+	for _, oz in ipairs({ -halfRD, halfRD }) do
+		for band = 0, 3 do
+			local stripe = Instance.new("Part")
+			stripe.Name = "HazardStripe"
+			stripe.Size = Vector3.new(colW + 0.1, 0.8 * scale, colW + 0.1)
+			stripe.Position = Vector3.new(
+				centerX + halfRW,
+				BUILDING_BASE + 2 * scale + band * 2.5 * scale,
+				centerZ + oz
+			)
+			stripe.Anchored = true
+			stripe.CanCollide = false
+			stripe.Material = Enum.Material.SmoothPlastic
+			stripe.Color = (band % 2 == 0) and Color3.fromRGB(220, 190, 0) or Color3.fromRGB(30, 30, 30)
+			stripe.Parent = model
+		end
+	end
+
+	-- Reactor dome
+	local domeDiam = 20 * scale
+	local dome = Instance.new("Part")
+	dome.Name = "ReactorDome"
+	dome.Shape = Enum.PartType.Ball
+	dome.Size = Vector3.new(domeDiam, domeDiam, domeDiam)
+	dome.Position = Vector3.new(centerX, BUILDING_BASE + reactorH, centerZ)
+	dome.Anchored = true
+	dome.Material = Enum.Material.SmoothPlastic
+	dome.Color = spec.domeColor
+	dome.Parent = model
+
+	---------------------------------------------------------------------------
+	-- 2 COOLING TOWERS (offset along Z)
+	---------------------------------------------------------------------------
+	local towerDiam = 12 * scale
+	local towerH = 30 * scale
+	local towerTopY = BUILDING_BASE + towerH / 2
+	local towerSpread = spec.towerSpread * scale
+
+	for _, side in ipairs({ -1, 1 }) do
+		local tz = centerZ + side * towerSpread
+		local tx = centerX
+
+		local tower = Instance.new("Part")
+		tower.Name = "CoolingTower"
+		tower.Shape = Enum.PartType.Cylinder
+		tower.Size = Vector3.new(towerH, towerDiam, towerDiam)
+		tower.CFrame = CFrame.new(tx, towerTopY, tz) * CFrame.Angles(0, 0, math.rad(90))
+		tower.Anchored = true
+		tower.Material = Enum.Material.Concrete
+		tower.Color = Color3.fromRGB(210, 210, 215)
+		tower.Parent = model
+
+		-- Tower rim
+		local rimDiam = 13 * scale
+		local rimH = 1.5 * scale
+		local rim = Instance.new("Part")
+		rim.Name = "TowerRim"
+		rim.Shape = Enum.PartType.Cylinder
+		rim.Size = Vector3.new(rimH, rimDiam, rimDiam)
+		rim.CFrame = CFrame.new(tx, BUILDING_BASE + towerH - rimH / 2, tz) * CFrame.Angles(0, 0, math.rad(90))
+		rim.Anchored = true
+		rim.Material = Enum.Material.Concrete
+		rim.Color = Color3.fromRGB(200, 200, 205)
+		rim.Parent = model
+
+		-- Green neon ring
+		local glowRingDiam = towerDiam + 1 * scale
+		local glowRingH = 0.6 * scale
+		local glowRing = Instance.new("Part")
+		glowRing.Name = "TowerGlowRing"
+		glowRing.Shape = Enum.PartType.Cylinder
+		glowRing.Size = Vector3.new(glowRingH, glowRingDiam, glowRingDiam)
+		glowRing.CFrame = CFrame.new(tx, BUILDING_BASE + towerH * 0.6, tz) * CFrame.Angles(0, 0, math.rad(90))
+		glowRing.Anchored = true
+		glowRing.CanCollide = false
+		glowRing.Material = Enum.Material.Neon
+		glowRing.Color = Color3.fromRGB(0, 255, 80)
+		glowRing.Parent = model
+
+		local ringLight = Instance.new("PointLight")
+		ringLight.Brightness = 1.2
+		ringLight.Range = 14
+		ringLight.Color = Color3.fromRGB(0, 255, 80)
+		ringLight.Parent = glowRing
+
+		-- Green steam at top
+		local steamPoint = Instance.new("Part")
+		steamPoint.Name = "SteamPoint"
+		steamPoint.Size = Vector3.new(1, 1, 1)
+		steamPoint.Position = Vector3.new(tx, BUILDING_BASE + towerH + 1, tz)
+		steamPoint.Anchored = true
+		steamPoint.CanCollide = false
+		steamPoint.Transparency = 1
+		steamPoint.Parent = model
+
+		local smoke = Instance.new("Smoke")
+		smoke.Size = 14
+		smoke.Opacity = 0.3
+		smoke.RiseVelocity = 8
+		smoke.Color = Color3.fromRGB(100, 255, 120)
+		smoke.Parent = steamPoint
+
+		local steamGlow = Instance.new("PointLight")
+		steamGlow.Brightness = 1.5
+		steamGlow.Range = 18
+		steamGlow.Color = Color3.fromRGB(80, 255, 100)
+		steamGlow.Parent = steamPoint
+
+		-- Pipe connecting reactor to cooling tower
+		local pipeLen = math.abs(towerSpread) - towerDiam / 2 - reactorD / 2
+		if pipeLen > 0 then
+			local pipeDiam = 2.5 * scale
+			local pipeY = BUILDING_BASE + 10 * scale
+			local pipeZ = centerZ + side * (reactorD / 2 + pipeLen / 2)
+
+			local pipe = Instance.new("Part")
+			pipe.Name = "ConnectingPipe"
+			pipe.Shape = Enum.PartType.Cylinder
+			pipe.Size = Vector3.new(pipeLen, pipeDiam, pipeDiam)
+			pipe.CFrame = CFrame.new(centerX, pipeY, pipeZ) * CFrame.Angles(math.rad(90), 0, 0)
+			pipe.Anchored = true
+			pipe.Material = Enum.Material.Metal
+			pipe.Color = Color3.fromRGB(140, 140, 145)
+			pipe.Parent = model
+		end
+	end
+
+	---------------------------------------------------------------------------
+	-- TURBINE HALL (beside reactor, +X side)
+	---------------------------------------------------------------------------
+	local turbW = 16 * scale
+	local turbH = 12 * scale
+	local turbD = 24 * scale
+	local turbX = centerX + reactorW / 2 + turbW / 2
+
+	local turbine = Instance.new("Part")
+	turbine.Name = "TurbineHall"
+	turbine.Size = Vector3.new(turbW, turbH, turbD)
+	turbine.Position = Vector3.new(turbX, BUILDING_BASE + turbH / 2, centerZ)
+	turbine.Anchored = true
+	turbine.Material = Enum.Material.Concrete
+	turbine.Color = Color3.fromRGB(160, 160, 165)
+	turbine.Parent = model
+
+	---------------------------------------------------------------------------
+	-- RADIATION DOOR (front +Z face of reactor)
+	---------------------------------------------------------------------------
+	local doorFaceZ = centerZ + reactorD / 2 + 0.15
+	local door = Instance.new("Part")
+	door.Name = "RadiationDoor"
+	door.Size = Vector3.new(10 * scale, 8 * scale, 0.3 * scale)
+	door.Position = Vector3.new(centerX, BUILDING_BASE + 4 * scale, doorFaceZ)
+	door.Anchored = true
+	door.Material = Enum.Material.SmoothPlastic
+	door.Color = Color3.fromRGB(220, 190, 0)
+	door.Parent = model
+
+	-- Radiation trefoil sign (above front door)
+	local NEON_GREEN = Color3.fromRGB(0, 255, 80)
+	local signR = 3.0 * scale
+	local neonThick = 0.3 * scale
+	local radCZ2 = doorFaceZ + 0.2
+	local radCY = BUILDING_BASE + 12 * scale
+
+	-- Green neon border ring
+	local borderRing = Instance.new("Part")
+	borderRing.Name = "RadBorderRing"
+	borderRing.Shape = Enum.PartType.Cylinder
+	borderRing.Size = Vector3.new(signR * 2.3, signR * 2.3, neonThick * 0.4)
+	borderRing.CFrame = CFrame.new(centerX, radCY, radCZ2 + 0.06)
+	borderRing.Anchored = true
+	borderRing.CanCollide = false
+	borderRing.Material = Enum.Material.Neon
+	borderRing.Color = NEON_GREEN
+	borderRing.Parent = model
+
+	-- Dark backing disc
+	local radBacking = Instance.new("Part")
+	radBacking.Name = "RadSignBacking"
+	radBacking.Shape = Enum.PartType.Cylinder
+	radBacking.Size = Vector3.new(signR * 1.95, signR * 1.95, neonThick * 0.5)
+	radBacking.CFrame = CFrame.new(centerX, radCY, radCZ2)
+	radBacking.Anchored = true
+	radBacking.CanCollide = false
+	radBacking.Material = Enum.Material.Metal
+	radBacking.Color = Color3.fromRGB(25, 25, 30)
+	radBacking.Parent = model
+
+	-- 3 trefoil blades (120 degrees apart in XY plane)
+	local bladeLen = 1.6 * scale
+	local bladeWid = 2.0 * scale
+	local bladeOff = 1.4 * scale
+	local radBlades = {}
+
+	for i = 0, 2 do
+		local angle = i * math.rad(120)
+		local blade = Instance.new("Part")
+		blade.Name = "RadBlade"
+		blade.Size = Vector3.new(bladeWid, bladeLen, neonThick)
+		blade.CFrame = CFrame.new(centerX, radCY, radCZ2 + 0.08)
+			* CFrame.Angles(0, 0, angle)
+			* CFrame.new(0, bladeOff, 0)
+		blade.Anchored = true
+		blade.CanCollide = false
+		blade.Material = Enum.Material.Neon
+		blade.Color = NEON_GREEN
+		blade.Parent = model
+		table.insert(radBlades, blade)
+	end
+
+	-- Yellow neon center dot
+	local centerDot = Instance.new("Part")
+	centerDot.Name = "RadCenter"
+	centerDot.Shape = Enum.PartType.Ball
+	centerDot.Size = Vector3.new(0.7 * scale, 0.7 * scale, 0.7 * scale)
+	centerDot.Position = Vector3.new(centerX, radCY, radCZ2 + 0.12)
+	centerDot.Anchored = true
+	centerDot.CanCollide = false
+	centerDot.Material = Enum.Material.Neon
+	centerDot.Color = Color3.fromRGB(255, 255, 0)
+	centerDot.Parent = model
+
+	local radLight = Instance.new("PointLight")
+	radLight.Brightness = 2
+	radLight.Range = 14
+	radLight.Color = NEON_GREEN
+	radLight.Parent = centerDot
+
+	-- "DANGER" neon text below trefoil
+	local dangerW = 5 * scale
+	local dangerH = 1.2 * scale
+	local dangerPart = Instance.new("Part")
+	dangerPart.Name = "DangerSign"
+	dangerPart.Size = Vector3.new(dangerW, dangerH, neonThick)
+	dangerPart.Position = Vector3.new(centerX, radCY - signR - 1.0 * scale, radCZ2)
+	dangerPart.Anchored = true
+	dangerPart.CanCollide = false
+	dangerPart.Material = Enum.Material.Neon
+	dangerPart.Color = Color3.fromRGB(255, 60, 30)
+	dangerPart.Parent = model
+
+	local dangerGui = Instance.new("SurfaceGui")
+	dangerGui.Face = Enum.NormalId.Front
+	dangerGui.Parent = dangerPart
+
+	local dangerTxt = Instance.new("TextLabel")
+	dangerTxt.Size = UDim2.new(1, 0, 1, 0)
+	dangerTxt.BackgroundTransparency = 1
+	dangerTxt.Font = Enum.Font.GothamBold
+	dangerTxt.Text = "DANGER"
+	dangerTxt.TextColor3 = Color3.new(1, 1, 1)
+	dangerTxt.TextScaled = true
+	dangerTxt.Parent = dangerGui
+
+	-- Hazard strips above door
+	for _, hOff in ipairs({ -3 * scale, 3 * scale }) do
+		local strip = Instance.new("Part")
+		strip.Name = "HazardStrip"
+		strip.Size = Vector3.new(9 * scale, 0.6 * scale, 0.35 * scale)
+		strip.Position = Vector3.new(centerX + hOff, BUILDING_BASE + 8.3 * scale, doorFaceZ + 0.05)
+		strip.Anchored = true
+		strip.CanCollide = false
+		strip.Material = Enum.Material.Neon
+		strip.Color = Color3.fromRGB(220, 190, 0)
+		strip.Parent = model
+	end
+
+	---------------------------------------------------------------------------
+	-- WARNING SIGN (neon text on front face)
+	---------------------------------------------------------------------------
+	local signW2 = 12 * scale
+	local signH2 = 3 * scale
+	local signZ2 = centerZ + reactorD / 2 + 0.3
+	local signY2 = BUILDING_BASE + reactorH - 4 * scale
+
+	local signPart = Instance.new("Part")
+	signPart.Name = "NuclearSign"
+	signPart.Size = Vector3.new(signW2, signH2, 0.4 * scale)
+	signPart.Position = Vector3.new(centerX, signY2, signZ2)
+	signPart.Anchored = true
+	signPart.Material = Enum.Material.Neon
+	signPart.Color = spec.signColor
+	signPart.Parent = model
+
+	local gui = Instance.new("SurfaceGui")
+	gui.Face = Enum.NormalId.Front
+	gui.Parent = signPart
+
+	local txt = Instance.new("TextLabel")
+	txt.Size = UDim2.new(1, 0, 1, 0)
+	txt.BackgroundTransparency = 1
+	txt.Font = Enum.Font.GothamBold
+	txt.Text = spec.signText
+	txt.TextColor3 = Color3.new(1, 1, 1)
+	txt.TextScaled = true
+	txt.Parent = gui
+
+	local signLight = Instance.new("PointLight")
+	signLight.Brightness = 1.5
+	signLight.Range = 16
+	signLight.Color = spec.signColor
+	signLight.Parent = signPart
+
+	---------------------------------------------------------------------------
+	-- SECURITY BARRIER (low metal railing, +Z side)
+	---------------------------------------------------------------------------
+	local barrierH = 3 * scale
+	local barrierD = 40 * scale
+
+	local barrier = Instance.new("Part")
+	barrier.Name = "SecurityBarrier"
+	barrier.Size = Vector3.new(barrierD, barrierH, 0.5 * scale)
+	barrier.Position = Vector3.new(centerX, BUILDING_BASE + barrierH / 2, centerZ + reactorD / 2 + 4 * scale)
+	barrier.Anchored = true
+	barrier.Material = Enum.Material.Metal
+	barrier.Color = Color3.fromRGB(100, 100, 105)
+	barrier.Parent = model
+
+	if options.parent then
+		model.Parent = options.parent
+	end
+
+	-- Return animation data for radiation pulse
+	return model, {
+		type = "radiation_pulse",
+		blades = radBlades,
+		light = radLight,
+		centerDot = centerDot,
+		borderRing = borderRing,
+	}
+end
+
 return AssetLibrary
