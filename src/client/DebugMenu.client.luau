@@ -162,23 +162,23 @@ addSectionLabel("TELEPORT")
 
 local DISTRICTS = {
 	-- Central band (rows 3-6)
-	{ name = "Downtown",    col = 5.5,  row = 5 },
-	{ name = "Commercial",  col = 1.5,  row = 5 },
-	{ name = "Government",  col = 9,    row = 5 },
-	{ name = "Prison",      col = 11,   row = 5 },
-	{ name = "Residential", col = 13,   row = 5 },
+	{ name = "Downtown",    key = "downtown" },
+	{ name = "Commercial",  key = "commercial" },
+	{ name = "Government",  key = "government" },
+	{ name = "Prison",      key = "prison" },
+	{ name = "Residential", key = "residential" },
 	-- North band (rows 0-2)
-	{ name = "Airport",     col = 1.5,  row = 1.5 },
-	{ name = "Industrial",  col = 5,    row = 1.5 },
-	{ name = "Power Plant", col = 8.5,  row = 1.5 },
-	{ name = "Military",    col = 11,   row = 1.5 },
-	{ name = "Nuclear",     col = 13,   row = 1.5 },
+	{ name = "Airport",     key = "airport" },
+	{ name = "Industrial",  key = "industrial" },
+	{ name = "Power Plant", key = "power_plant" },
+	{ name = "Military",    key = "military" },
+	{ name = "Nuclear",     key = "nuclear" },
 	-- South band (rows 7-9)
-	{ name = "Harbor",      col = 1.5,  row = 8.5 },
-	{ name = "Water Plant", col = 4.5,  row = 8.5 },
-	{ name = "Waterfront",  col = 7.5,  row = 8.5 },
-	{ name = "Beach",       col = 10.5, row = 8.5 },
-	{ name = "Space",       col = 13,   row = 8.5 },
+	{ name = "Harbor",      key = "harbor" },
+	{ name = "Water Plant", key = "water_plant" },
+	{ name = "Waterfront",  key = "waterfront" },
+	{ name = "Beach",       key = "beach" },
+	{ name = "Space",       key = "space" },
 }
 
 local districtIndex = 1
@@ -186,12 +186,10 @@ local teleportBtn = addRow("DISTRICT", DISTRICTS[1].name, BTN_TELEPORT)
 
 teleportBtn.MouseButton1Click:Connect(function()
 	local dist = DISTRICTS[districtIndex]
-	local x = GTAConfig.CITY_ORIGIN_X + dist.col * GTAConfig.CELL_SIZE
-	local z = GTAConfig.CITY_ORIGIN_Z + dist.row * GTAConfig.CELL_SIZE
 	local remote = Remotes.get("DebugTeleport")
 	if remote then
-		remote:FireServer(Vector3.new(x, GTAConfig.GROUND_Y + 5, z))
-		print("[Debug] Teleporting to " .. dist.name)
+		remote:FireServer(dist.key)
+		print("[Debug] Teleporting to " .. dist.name .. " pad")
 	end
 	-- Cycle to next district
 	districtIndex = districtIndex % #DISTRICTS + 1

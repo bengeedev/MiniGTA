@@ -7544,4 +7544,203 @@ function AssetLibrary.createMilitaryBase(centerX, centerZ, options)
 	return model
 end
 
+--------------------------------------------------------------------------------
+-- TELEPORT PAD
+-- Neon landing platform with holographic rings and district name sign.
+-- Safe spawn point — placed at road-edge corners away from buildings/traffic.
+-- Options: parent, scale, districtName, color (Color3), baseY
+--------------------------------------------------------------------------------
+
+function AssetLibrary.createTeleportPad(centerX, centerZ, options)
+	options = options or {}
+	local scale = options.scale or 1
+	local baseY = options.baseY or BUILDING_BASE
+	local padColor = options.color or Color3.fromRGB(0, 180, 255)
+	local districtName = options.districtName or "ZONE"
+
+	local model = Instance.new("Model")
+	model.Name = "TeleportPad_" .. districtName
+
+	-- Main platform (octagonal look via cylinder)
+	local platDiam = 12 * scale
+	local platH = 0.6 * scale
+	local platform = Instance.new("Part")
+	platform.Name = "Platform"
+	platform.Shape = Enum.PartType.Cylinder
+	platform.Size = Vector3.new(platH, platDiam, platDiam)
+	platform.CFrame = CFrame.new(centerX, baseY + platH / 2, centerZ) * CFrame.Angles(0, 0, math.rad(90))
+	platform.Anchored = true
+	platform.Material = Enum.Material.Neon
+	platform.Color = padColor
+	platform.Parent = model
+
+	-- Dark inner disc (contrast ring)
+	local innerDiam = 9 * scale
+	local innerH = 0.15 * scale
+	local innerDisc = Instance.new("Part")
+	innerDisc.Name = "InnerDisc"
+	innerDisc.Shape = Enum.PartType.Cylinder
+	innerDisc.Size = Vector3.new(innerH, innerDiam, innerDiam)
+	innerDisc.CFrame = CFrame.new(centerX, baseY + platH + innerH / 2, centerZ) * CFrame.Angles(0, 0, math.rad(90))
+	innerDisc.Anchored = true
+	innerDisc.CanCollide = false
+	innerDisc.Material = Enum.Material.SmoothPlastic
+	innerDisc.Color = Color3.fromRGB(20, 20, 25)
+	innerDisc.Parent = model
+
+	-- Neon center dot
+	local dotDiam = 2 * scale
+	local dot = Instance.new("Part")
+	dot.Name = "CenterDot"
+	dot.Shape = Enum.PartType.Cylinder
+	dot.Size = Vector3.new(0.2 * scale, dotDiam, dotDiam)
+	dot.CFrame = CFrame.new(centerX, baseY + platH + 0.2 * scale, centerZ) * CFrame.Angles(0, 0, math.rad(90))
+	dot.Anchored = true
+	dot.CanCollide = false
+	dot.Material = Enum.Material.Neon
+	dot.Color = padColor
+	dot.Parent = model
+
+	-- Holographic ring (floating, slow spin via animation data)
+	local ringDiam = 10 * scale
+	local ringThick = 0.25 * scale
+	local ring = Instance.new("Part")
+	ring.Name = "HoloRing"
+	ring.Shape = Enum.PartType.Cylinder
+	ring.Size = Vector3.new(ringThick, ringDiam, ringDiam)
+	ring.CFrame = CFrame.new(centerX, baseY + 3 * scale, centerZ) * CFrame.Angles(0, 0, math.rad(90))
+	ring.Anchored = true
+	ring.CanCollide = false
+	ring.Material = Enum.Material.Neon
+	ring.Color = padColor
+	ring.Transparency = 0.4
+	ring.Parent = model
+
+	-- Second ring (smaller, higher)
+	local ring2Diam = 6 * scale
+	local ring2 = Instance.new("Part")
+	ring2.Name = "HoloRing2"
+	ring2.Shape = Enum.PartType.Cylinder
+	ring2.Size = Vector3.new(ringThick, ring2Diam, ring2Diam)
+	ring2.CFrame = CFrame.new(centerX, baseY + 5 * scale, centerZ) * CFrame.Angles(0, 0, math.rad(90))
+	ring2.Anchored = true
+	ring2.CanCollide = false
+	ring2.Material = Enum.Material.Neon
+	ring2.Color = padColor
+	ring2.Transparency = 0.55
+	ring2.Parent = model
+
+	-- Glow light under rings
+	local glow = Instance.new("PointLight")
+	glow.Brightness = 2
+	glow.Range = 20
+	glow.Color = padColor
+	glow.Parent = dot
+
+	-- 4 corner pillars with neon strips
+	local pillarH = 4 * scale
+	local pillarW = 0.4 * scale
+	local pillarOff = 5 * scale
+	for _, ox in ipairs({ -pillarOff, pillarOff }) do
+		for _, oz in ipairs({ -pillarOff, pillarOff }) do
+			local pillar = Instance.new("Part")
+			pillar.Name = "PadPillar"
+			pillar.Size = Vector3.new(pillarW, pillarH, pillarW)
+			pillar.Position = Vector3.new(centerX + ox, baseY + pillarH / 2, centerZ + oz)
+			pillar.Anchored = true
+			pillar.Material = Enum.Material.Neon
+			pillar.Color = padColor
+			pillar.Transparency = 0.2
+			pillar.Parent = model
+		end
+	end
+
+	-- District name sign (floating above)
+	local signW = 10 * scale
+	local signH = 2 * scale
+	local signPart = Instance.new("Part")
+	signPart.Name = "DistrictSign"
+	signPart.Size = Vector3.new(signW, signH, 0.2 * scale)
+	signPart.Position = Vector3.new(centerX, baseY + 7 * scale, centerZ)
+	signPart.Anchored = true
+	signPart.CanCollide = false
+	signPart.Material = Enum.Material.Neon
+	signPart.Color = padColor
+	signPart.Transparency = 0.3
+	signPart.Parent = model
+
+	local gui = Instance.new("SurfaceGui")
+	gui.Face = Enum.NormalId.Front
+	gui.Parent = signPart
+
+	local lbl = Instance.new("TextLabel")
+	lbl.Size = UDim2.new(1, 0, 1, 0)
+	lbl.BackgroundTransparency = 1
+	lbl.Font = Enum.Font.GothamBold
+	lbl.Text = districtName
+	lbl.TextColor3 = Color3.new(1, 1, 1)
+	lbl.TextScaled = true
+	lbl.Parent = gui
+
+	-- Back face too
+	local gui2 = Instance.new("SurfaceGui")
+	gui2.Face = Enum.NormalId.Back
+	gui2.Parent = signPart
+
+	local lbl2 = Instance.new("TextLabel")
+	lbl2.Size = UDim2.new(1, 0, 1, 0)
+	lbl2.BackgroundTransparency = 1
+	lbl2.Font = Enum.Font.GothamBold
+	lbl2.Text = districtName
+	lbl2.TextColor3 = Color3.new(1, 1, 1)
+	lbl2.TextScaled = true
+	lbl2.Parent = gui2
+
+	-- Beam particles (vertical light column)
+	local beamTop = Instance.new("Part")
+	beamTop.Name = "BeamTop"
+	beamTop.Size = Vector3.new(1, 1, 1)
+	beamTop.Position = Vector3.new(centerX, baseY + 15 * scale, centerZ)
+	beamTop.Anchored = true
+	beamTop.CanCollide = false
+	beamTop.Transparency = 1
+	beamTop.Parent = model
+
+	local beamBottom = Instance.new("Part")
+	beamBottom.Name = "BeamBottom"
+	beamBottom.Size = Vector3.new(1, 1, 1)
+	beamBottom.Position = Vector3.new(centerX, baseY + platH, centerZ)
+	beamBottom.Anchored = true
+	beamBottom.CanCollide = false
+	beamBottom.Transparency = 1
+	beamBottom.Parent = model
+
+	local att0 = Instance.new("Attachment")
+	att0.Parent = beamBottom
+	local att1 = Instance.new("Attachment")
+	att1.Parent = beamTop
+
+	local beam = Instance.new("Beam")
+	beam.Attachment0 = att0
+	beam.Attachment1 = att1
+	beam.Width0 = 4 * scale
+	beam.Width1 = 0.5 * scale
+	beam.Color = ColorSequence.new(padColor)
+	beam.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.6), NumberSequenceKeypoint.new(1, 0.95) })
+	beam.LightEmission = 1
+	beam.FaceCamera = true
+	beam.Parent = beamBottom
+
+	if options.parent then
+		model.Parent = options.parent
+	end
+
+	return model, {
+		type = "teleport_pad",
+		ring = ring,
+		ring2 = ring2,
+		platform = platform,
+	}
+end
+
 return AssetLibrary

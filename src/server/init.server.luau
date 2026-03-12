@@ -235,18 +235,30 @@ end
 
 local IS_STUDIO = RunService:IsStudio()
 
--- Teleport to position
+-- Teleport to position or district teleport pad
 local debugTeleport = Remotes.get("DebugTeleport")
 if debugTeleport then
-	debugTeleport.OnServerEvent:Connect(function(player, position)
+	debugTeleport.OnServerEvent:Connect(function(player, positionOrName)
 		if not IS_STUDIO then return end
 		local character = player.Character
 		if not character then return end
 		local hrp = character:FindFirstChild("HumanoidRootPart")
-		if hrp then
-			hrp.CFrame = CFrame.new(position)
-			print("[Debug] Teleported", player.Name, "to", position)
+		if not hrp then return end
+
+		local targetPos
+		if typeof(positionOrName) == "string" then
+			-- District name → look up teleport pad position
+			targetPos = CityBuilder.teleportPads[positionOrName]
+			if not targetPos then
+				warn("[Debug] No teleport pad for district:", positionOrName)
+				return
+			end
+		else
+			targetPos = positionOrName
 		end
+
+		hrp.CFrame = CFrame.new(targetPos)
+		print("[Debug] Teleported", player.Name, "to", targetPos)
 	end)
 end
 

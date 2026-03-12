@@ -858,6 +858,93 @@ local function populateCompounds()
 end
 
 --------------------------------------------------------------------------------
+-- TELEPORT PADS — one per district, at a safe sidewalk corner
+--------------------------------------------------------------------------------
+
+-- District neon colors (match district identity)
+local PAD_COLORS = {
+	downtown     = Color3.fromRGB(0, 140, 255),
+	commercial   = Color3.fromRGB(255, 200, 50),
+	government   = Color3.fromRGB(220, 220, 240),
+	prison       = Color3.fromRGB(255, 80, 40),
+	residential  = Color3.fromRGB(80, 220, 100),
+	airport      = Color3.fromRGB(150, 150, 170),
+	industrial   = Color3.fromRGB(200, 140, 60),
+	power_plant  = Color3.fromRGB(255, 180, 40),
+	military     = Color3.fromRGB(60, 140, 50),
+	nuclear      = Color3.fromRGB(0, 255, 80),
+	harbor       = Color3.fromRGB(140, 120, 80),
+	water_plant  = Color3.fromRGB(40, 180, 220),
+	waterfront   = Color3.fromRGB(80, 200, 240),
+	beach        = Color3.fromRGB(255, 220, 100),
+	space        = Color3.fromRGB(140, 100, 255),
+}
+
+-- Display names for signs
+local PAD_NAMES = {
+	downtown     = "DOWNTOWN",
+	commercial   = "COMMERCIAL",
+	government   = "GOVERNMENT",
+	prison       = "PRISON",
+	residential  = "RESIDENTIAL",
+	airport      = "AIRPORT",
+	industrial   = "INDUSTRIAL",
+	power_plant  = "POWER PLANT",
+	military     = "MILITARY",
+	nuclear      = "NUCLEAR",
+	harbor       = "HARBOR",
+	water_plant  = "WATER PLANT",
+	waterfront   = "WATERFRONT",
+	beach        = "BEACH",
+	space        = "SPACE CENTER",
+}
+
+-- Store pad positions so DebugMenu can teleport to exact spot
+CityBuilder.teleportPads = {} -- { [districtName] = Vector3 }
+
+local function placeTeleportPads()
+	local folder = DecorUtils.decorFolder
+	local count = 0
+
+	for _, dist in ipairs(GTAConfig.DISTRICTS) do
+		-- Find the nearest road intersection corner inside this district
+		-- Place pad at colMin edge + offset, rowMin edge + offset (top-left corner)
+		local edgeCol = dist.colMin
+		local edgeRow = dist.rowMin
+
+		-- World position of the intersection center
+		local intX = GTAConfig.getColEdgeX(edgeCol)
+		local intZ = GTAConfig.getRowEdgeZ(edgeRow)
+
+		-- Offset into the block (away from road center), on the sidewalk
+		-- +X and +Z to be inside the district, not outside it
+		local SIDEWALK_OFFSET = 28  -- road half-width(20) + 8 studs onto sidewalk
+		local padX = intX + SIDEWALK_OFFSET
+		local padZ = intZ + SIDEWALK_OFFSET
+
+		-- For compound zones, use a higher baseY (above concrete pad)
+		local padBaseY = GROUND_Y
+		if GTAConfig.COMPOUND_DISTRICTS[dist.name] then
+			padBaseY = GROUND_Y + 3 + 1.5  -- match compound pad top
+		end
+
+		local padModel, animData = AssetLibrary.createTeleportPad(padX, padZ, {
+			parent = folder,
+			scale = 1,
+			districtName = PAD_NAMES[dist.name] or dist.name:upper(),
+			color = PAD_COLORS[dist.name] or Color3.fromRGB(0, 180, 255),
+			baseY = padBaseY,
+		})
+
+		-- Store landing position (top of platform + 3 studs clearance)
+		CityBuilder.teleportPads[dist.name] = Vector3.new(padX, padBaseY + 3, padZ)
+		count += 1
+	end
+
+	print("[CityBuilder] Teleport pads placed:", count)
+end
+
+--------------------------------------------------------------------------------
 -- PUBLIC API
 --------------------------------------------------------------------------------
 
@@ -879,6 +966,7 @@ function CityBuilder.build(decorFolderRef, vehicleFolderRef, npcFolderRef)
 	placeTrafficLights()
 	populateBlocks()
 	populateCompounds()
+	placeTeleportPads()
 
 	print("[CityBuilder] === City complete! ===")
 end
