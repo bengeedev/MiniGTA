@@ -6415,4 +6415,505 @@ function AssetLibrary.createNuclearPlant(centerX, centerZ, options)
 	}
 end
 
+--------------------------------------------------------------------------------
+-- POWER PLANT
+-- Industrial power facility: turbine hall, 2 Tesla coils with electrical arc
+-- beams + spark emitters, transformer boxes, high-voltage pylon with power
+-- lines, warning signs, security fence. Returns arc animation data.
+-- Options: parent, scale, variant (1 or 2)
+--------------------------------------------------------------------------------
+
+function AssetLibrary.createPowerPlant(centerX, centerZ, options)
+	options = options or {}
+	local scale = options.scale or 1
+
+	local SPECS = {
+		{
+			bodyMat = Enum.Material.DiamondPlate, bodyColor = Color3.fromRGB(80, 80, 90),
+			roofColor = Color3.fromRGB(55, 55, 65), signText = "VOLT ENERGY",
+			signColor = Color3.fromRGB(255, 180, 60), arcColor = Color3.fromRGB(120, 180, 255),
+			sparkColor = Color3.fromRGB(200, 220, 255), coilColor = Color3.fromRGB(170, 170, 180),
+			transformerCount = 2,
+		},
+		{
+			bodyMat = Enum.Material.Metal, bodyColor = Color3.fromRGB(75, 80, 90),
+			roofColor = Color3.fromRGB(50, 55, 65), signText = "POWER GRID CO.",
+			signColor = Color3.fromRGB(60, 200, 255), arcColor = Color3.fromRGB(180, 140, 255),
+			sparkColor = Color3.fromRGB(220, 180, 255), coilColor = Color3.fromRGB(180, 175, 170),
+			transformerCount = 3,
+		},
+	}
+	local spec = SPECS[options.variant or math.random(1, 2)]
+
+	local model = Instance.new("Model")
+	model.Name = "PowerPlant"
+
+	-- Dimensions
+	local bodyW = 30 * scale
+	local bodyH = 14 * scale
+	local bodyD = 26 * scale
+
+	---------------------------------------------------------------------------
+	-- Helper: create a Tesla coil, returns sphere + glow
+	---------------------------------------------------------------------------
+	local function createTeslaCoil(px, pz)
+		local pedW = 4 * scale
+		local pedH = 2 * scale
+		local pedestal = Instance.new("Part")
+		pedestal.Name = "CoilPedestal"
+		pedestal.Size = Vector3.new(pedW, pedH, pedW)
+		pedestal.Position = Vector3.new(px, BUILDING_BASE + pedH / 2, pz)
+		pedestal.Anchored = true
+		pedestal.Material = Enum.Material.Concrete
+		pedestal.Color = Color3.fromRGB(130, 130, 135)
+		pedestal.Parent = model
+
+		-- 3 insulator discs
+		local insulatorDiam = 3.0 * scale
+		local insulatorH = 0.6 * scale
+		local insulatorBaseY = BUILDING_BASE + pedH
+		for i = 0, 2 do
+			local ins = Instance.new("Part")
+			ins.Name = "Insulator"
+			ins.Shape = Enum.PartType.Cylinder
+			ins.Size = Vector3.new(insulatorH, insulatorDiam - i * 0.3 * scale, insulatorDiam - i * 0.3 * scale)
+			ins.CFrame = CFrame.new(px, insulatorBaseY + i * (insulatorH + 0.3 * scale) + insulatorH / 2, pz) * CFrame.Angles(0, 0, math.rad(90))
+			ins.Anchored = true
+			ins.Material = Enum.Material.SmoothPlastic
+			ins.Color = Color3.fromRGB(220, 200, 160)
+			ins.Parent = model
+		end
+
+		-- Main coil column
+		local coilDiam = 1.8 * scale
+		local coilH = 14 * scale
+		local coilBaseY = insulatorBaseY + 3 * (insulatorH + 0.3 * scale)
+		local coil = Instance.new("Part")
+		coil.Name = "CoilColumn"
+		coil.Shape = Enum.PartType.Cylinder
+		coil.Size = Vector3.new(coilH, coilDiam, coilDiam)
+		coil.CFrame = CFrame.new(px, coilBaseY + coilH / 2, pz) * CFrame.Angles(0, 0, math.rad(90))
+		coil.Anchored = true
+		coil.Material = Enum.Material.Metal
+		coil.Color = spec.coilColor
+		coil.Parent = model
+
+		-- Copper wire wraps
+		local wrapCount = 5
+		for i = 1, wrapCount do
+			local wy = coilBaseY + (i / (wrapCount + 1)) * coilH
+			local wrap = Instance.new("Part")
+			wrap.Name = "CoilWrap"
+			wrap.Shape = Enum.PartType.Cylinder
+			wrap.Size = Vector3.new(0.4 * scale, coilDiam + 0.8 * scale, coilDiam + 0.8 * scale)
+			wrap.CFrame = CFrame.new(px, wy, pz) * CFrame.Angles(0, 0, math.rad(90))
+			wrap.Anchored = true
+			wrap.CanCollide = false
+			wrap.Material = Enum.Material.Neon
+			wrap.Color = Color3.fromRGB(200, 140, 50)
+			wrap.Parent = model
+		end
+
+		-- Top sphere
+		local sphereDiam = 3.5 * scale
+		local sphereY = coilBaseY + coilH + sphereDiam / 2
+		local sphere = Instance.new("Part")
+		sphere.Name = "CoilSphere"
+		sphere.Shape = Enum.PartType.Ball
+		sphere.Size = Vector3.new(sphereDiam, sphereDiam, sphereDiam)
+		sphere.Position = Vector3.new(px, sphereY, pz)
+		sphere.Anchored = true
+		sphere.Material = Enum.Material.Metal
+		sphere.Color = spec.coilColor
+		sphere.Parent = model
+
+		-- Spark emitter
+		local sparkPart = Instance.new("Part")
+		sparkPart.Name = "SparkPoint"
+		sparkPart.Size = Vector3.new(1, 1, 1)
+		sparkPart.Position = Vector3.new(px, sphereY + sphereDiam / 2, pz)
+		sparkPart.Anchored = true
+		sparkPart.CanCollide = false
+		sparkPart.Transparency = 1
+		sparkPart.Parent = model
+
+		local sparks = Instance.new("ParticleEmitter")
+		sparks.Name = "Sparks"
+		sparks.Rate = 15
+		sparks.Speed = NumberRange.new(4, 10)
+		sparks.Lifetime = NumberRange.new(0.1, 0.3)
+		sparks.SpreadAngle = Vector2.new(60, 60)
+		sparks.LightEmission = 1
+		sparks.Size = NumberSequence.new(0.3, 0)
+		sparks.Color = ColorSequence.new(spec.sparkColor)
+		sparks.Brightness = 3
+		sparks.Parent = sparkPart
+
+		local glow = Instance.new("PointLight")
+		glow.Name = "CoilGlow"
+		glow.Brightness = 2
+		glow.Range = 18
+		glow.Color = spec.arcColor
+		glow.Parent = sphere
+
+		return sphere, glow
+	end
+
+	---------------------------------------------------------------------------
+	-- Helper: create a transformer box
+	---------------------------------------------------------------------------
+	local function createTransformer(px, pz)
+		local boxW = 4 * scale
+		local boxH = 3.5 * scale
+		local boxD = 3 * scale
+
+		local box = Instance.new("Part")
+		box.Name = "TransformerBox"
+		box.Size = Vector3.new(boxW, boxH, boxD)
+		box.Position = Vector3.new(px, BUILDING_BASE + boxH / 2, pz)
+		box.Anchored = true
+		box.Material = Enum.Material.Metal
+		box.Color = Color3.fromRGB(100, 105, 110)
+		box.Parent = model
+
+		-- 3 insulator bushings on top
+		for i = -1, 1 do
+			local bushing = Instance.new("Part")
+			bushing.Name = "Bushing"
+			bushing.Shape = Enum.PartType.Cylinder
+			bushing.Size = Vector3.new(2.5 * scale, 0.8 * scale, 0.8 * scale)
+			bushing.CFrame = CFrame.new(px + i * 1.2 * scale, BUILDING_BASE + boxH + 1.25 * scale, pz) * CFrame.Angles(0, 0, math.rad(90))
+			bushing.Anchored = true
+			bushing.Material = Enum.Material.SmoothPlastic
+			bushing.Color = Color3.fromRGB(200, 180, 140)
+			bushing.Parent = model
+		end
+
+		-- Warning sticker
+		local sticker = Instance.new("Part")
+		sticker.Name = "WarningSticker"
+		sticker.Size = Vector3.new(1.5 * scale, 1.5 * scale, 0.1)
+		sticker.Position = Vector3.new(px, BUILDING_BASE + boxH * 0.6, pz + boxD / 2 + 0.05)
+		sticker.Anchored = true
+		sticker.CanCollide = false
+		sticker.Material = Enum.Material.Neon
+		sticker.Color = Color3.fromRGB(220, 190, 0)
+		sticker.Parent = model
+
+		-- Spark emitter
+		local sparkPoint = Instance.new("Part")
+		sparkPoint.Name = "TransformerSpark"
+		sparkPoint.Size = Vector3.new(1, 1, 1)
+		sparkPoint.Position = Vector3.new(px, BUILDING_BASE + boxH + 2 * scale, pz)
+		sparkPoint.Anchored = true
+		sparkPoint.CanCollide = false
+		sparkPoint.Transparency = 1
+		sparkPoint.Parent = model
+
+		local sparks = Instance.new("ParticleEmitter")
+		sparks.Rate = 5
+		sparks.Speed = NumberRange.new(2, 6)
+		sparks.Lifetime = NumberRange.new(0.05, 0.15)
+		sparks.SpreadAngle = Vector2.new(90, 90)
+		sparks.LightEmission = 1
+		sparks.Size = NumberSequence.new(0.2, 0)
+		sparks.Color = ColorSequence.new(Color3.fromRGB(200, 220, 255))
+		sparks.Brightness = 2
+		sparks.Parent = sparkPoint
+	end
+
+	---------------------------------------------------------------------------
+	-- MAIN TURBINE HALL
+	---------------------------------------------------------------------------
+	local body = Instance.new("Part")
+	body.Name = "TurbineHall"
+	body.Size = Vector3.new(bodyW, bodyH, bodyD)
+	body.Position = Vector3.new(centerX, BUILDING_BASE + bodyH / 2, centerZ)
+	body.Anchored = true
+	body.Material = spec.bodyMat
+	body.Color = spec.bodyColor
+	body.Parent = model
+
+	local roof = Instance.new("Part")
+	roof.Name = "TurbineRoof"
+	roof.Size = Vector3.new(bodyW + 1 * scale, 0.6 * scale, bodyD + 1 * scale)
+	roof.Position = Vector3.new(centerX, BUILDING_BASE + bodyH + 0.3 * scale, centerZ)
+	roof.Anchored = true
+	roof.Material = Enum.Material.DiamondPlate
+	roof.Color = spec.roofColor
+	roof.Parent = model
+
+	-- Windows on all 4 faces
+	addWindowsToFace(model, "z", centerZ + bodyD / 2 + 0.05, centerX, bodyW, BUILDING_BASE, 2, bodyH / 2, 2.0, 1.8, 3.0, Color3.fromRGB(200, 220, 255), 0.30)
+	addWindowsToFace(model, "z", centerZ - bodyD / 2 - 0.05, centerX, bodyW, BUILDING_BASE, 2, bodyH / 2, 2.0, 1.8, 3.0, Color3.fromRGB(200, 220, 255), 0.15)
+	addWindowsToFace(model, "x", centerX + bodyW / 2 + 0.05, centerZ, bodyD, BUILDING_BASE, 2, bodyH / 2, 2.0, 1.8, 3.0, Color3.fromRGB(200, 220, 255), 0.20)
+	addWindowsToFace(model, "x", centerX - bodyW / 2 - 0.05, centerZ, bodyD, BUILDING_BASE, 2, bodyH / 2, 2.0, 1.8, 3.0, Color3.fromRGB(200, 220, 255), 0.20)
+
+	---------------------------------------------------------------------------
+	-- 2 TESLA COILS (in front of building, +Z side)
+	---------------------------------------------------------------------------
+	local coilSpacing = 12 * scale
+	local coilZ = centerZ + bodyD / 2 + 6 * scale
+	local coil1X = centerX - coilSpacing / 2
+	local coil2X = centerX + coilSpacing / 2
+
+	local sphere1, glow1 = createTeslaCoil(coil1X, coilZ)
+	local sphere2, glow2 = createTeslaCoil(coil2X, coilZ)
+
+	---------------------------------------------------------------------------
+	-- ELECTRICAL ARC BEAMS between the two Tesla coils
+	---------------------------------------------------------------------------
+	local att1 = Instance.new("Attachment")
+	att1.Name = "ArcAttach1"
+	att1.Parent = sphere1
+
+	local att2 = Instance.new("Attachment")
+	att2.Name = "ArcAttach2"
+	att2.Parent = sphere2
+
+	local beam = Instance.new("Beam")
+	beam.Name = "ElectricalArc"
+	beam.Attachment0 = att1
+	beam.Attachment1 = att2
+	beam.Segments = 24
+	beam.Width0 = 0.6 * scale
+	beam.Width1 = 0.6 * scale
+	beam.CurveSize0 = 4 * scale
+	beam.CurveSize1 = -3 * scale
+	beam.LightEmission = 1
+	beam.LightInfluence = 0
+	beam.FaceCamera = true
+	beam.Color = ColorSequence.new(spec.arcColor)
+	beam.Transparency = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 0.1),
+		NumberSequenceKeypoint.new(0.5, 0),
+		NumberSequenceKeypoint.new(1, 0.1),
+	})
+	beam.Brightness = 3
+	beam.Parent = sphere1
+
+	local beam2 = Instance.new("Beam")
+	beam2.Name = "ElectricalArc2"
+	beam2.Attachment0 = att1
+	beam2.Attachment1 = att2
+	beam2.Segments = 20
+	beam2.Width0 = 0.3 * scale
+	beam2.Width1 = 0.3 * scale
+	beam2.CurveSize0 = -2 * scale
+	beam2.CurveSize1 = 5 * scale
+	beam2.LightEmission = 1
+	beam2.LightInfluence = 0
+	beam2.FaceCamera = true
+	beam2.Color = ColorSequence.new(Color3.fromRGB(240, 240, 255))
+	beam2.Transparency = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 0.2),
+		NumberSequenceKeypoint.new(0.5, 0.05),
+		NumberSequenceKeypoint.new(1, 0.2),
+	})
+	beam2.Brightness = 4
+	beam2.Parent = sphere1
+
+	---------------------------------------------------------------------------
+	-- TRANSFORMER BOXES (between coils and building, -Z side)
+	---------------------------------------------------------------------------
+	local tfBaseZ = centerZ - bodyD / 2 + 4 * scale
+	local tfSpacing = bodyW / (spec.transformerCount + 1)
+	for i = 1, spec.transformerCount do
+		local tfX = centerX - bodyW / 2 + i * tfSpacing
+		createTransformer(tfX, tfBaseZ)
+	end
+
+	---------------------------------------------------------------------------
+	-- HIGH-VOLTAGE PYLON (behind building, -Z side)
+	---------------------------------------------------------------------------
+	local pylonZ = centerZ - bodyD / 2 - 6 * scale
+	local pylonH = 28 * scale
+	local pylonW = 1.5 * scale
+
+	local pole = Instance.new("Part")
+	pole.Name = "PylonPole"
+	pole.Size = Vector3.new(pylonW, pylonH, pylonW)
+	pole.Position = Vector3.new(centerX, BUILDING_BASE + pylonH / 2, pylonZ)
+	pole.Anchored = true
+	pole.Material = Enum.Material.Metal
+	pole.Color = Color3.fromRGB(120, 120, 125)
+	pole.Parent = model
+
+	-- Cross arms (3 levels)
+	for i = 1, 3 do
+		local armY = BUILDING_BASE + pylonH * (0.5 + i * 0.15)
+		local armLen = (14 - i * 2) * scale
+		local arm = Instance.new("Part")
+		arm.Name = "PylonArm"
+		arm.Size = Vector3.new(armLen, pylonW * 0.8, pylonW * 0.8)
+		arm.Position = Vector3.new(centerX, armY, pylonZ)
+		arm.Anchored = true
+		arm.Material = Enum.Material.Metal
+		arm.Color = Color3.fromRGB(110, 110, 115)
+		arm.Parent = model
+
+		for _, endDir in ipairs({ -1, 1 }) do
+			local insX = centerX + endDir * (armLen / 2)
+			local ins = Instance.new("Part")
+			ins.Name = "PylonInsulator"
+			ins.Shape = Enum.PartType.Cylinder
+			ins.Size = Vector3.new(2 * scale, 1 * scale, 1 * scale)
+			ins.CFrame = CFrame.new(insX, armY - 1 * scale, pylonZ) * CFrame.Angles(0, 0, math.rad(90))
+			ins.Anchored = true
+			ins.Material = Enum.Material.SmoothPlastic
+			ins.Color = Color3.fromRGB(210, 190, 150)
+			ins.Parent = model
+		end
+	end
+
+	-- Diagonal braces
+	for _, bDir in ipairs({ -1, 1 }) do
+		local brace = Instance.new("Part")
+		brace.Name = "PylonBrace"
+		brace.Size = Vector3.new(0.6 * scale, 18 * scale, 0.6 * scale)
+		brace.CFrame = CFrame.new(centerX + bDir * 2 * scale, BUILDING_BASE + pylonH * 0.5, pylonZ) * CFrame.Angles(0, 0, math.rad(bDir * 15))
+		brace.Anchored = true
+		brace.Material = Enum.Material.Metal
+		brace.Color = Color3.fromRGB(115, 115, 120)
+		brace.Parent = model
+	end
+
+	-- Power line from pylon to building roof
+	local lineAtt1 = Instance.new("Attachment")
+	lineAtt1.Position = Vector3.new(0, pylonH * 0.35, 0)
+	lineAtt1.Parent = pole
+
+	local lineAtt2 = Instance.new("Attachment")
+	lineAtt2.Position = Vector3.new(0, 0, -bodyD / 2)
+	lineAtt2.Parent = roof
+
+	local powerLine = Instance.new("Beam")
+	powerLine.Name = "PowerLine"
+	powerLine.Attachment0 = lineAtt1
+	powerLine.Attachment1 = lineAtt2
+	powerLine.Segments = 12
+	powerLine.Width0 = 0.15 * scale
+	powerLine.Width1 = 0.15 * scale
+	powerLine.CurveSize0 = -3 * scale
+	powerLine.CurveSize1 = -3 * scale
+	powerLine.FaceCamera = true
+	powerLine.Color = ColorSequence.new(Color3.fromRGB(40, 40, 45))
+	powerLine.Transparency = NumberSequence.new(0)
+	powerLine.Parent = pole
+
+	---------------------------------------------------------------------------
+	-- WARNING SIGN (DANGER HIGH VOLTAGE, front +Z)
+	---------------------------------------------------------------------------
+	local warnSignW = 10 * scale
+	local warnSignH = 2 * scale
+	local warnZ = centerZ + bodyD / 2 + 2 * scale
+
+	local warnPart = Instance.new("Part")
+	warnPart.Name = "HighVoltageSign"
+	warnPart.Size = Vector3.new(warnSignW, warnSignH, 0.3 * scale)
+	warnPart.Position = Vector3.new(centerX, BUILDING_BASE + 5 * scale, warnZ)
+	warnPart.Anchored = true
+	warnPart.Material = Enum.Material.Neon
+	warnPart.Color = Color3.fromRGB(255, 60, 20)
+	warnPart.Parent = model
+
+	local warnGui = Instance.new("SurfaceGui")
+	warnGui.Face = Enum.NormalId.Front
+	warnGui.Parent = warnPart
+
+	local warnTxt = Instance.new("TextLabel")
+	warnTxt.Size = UDim2.new(1, 0, 1, 0)
+	warnTxt.BackgroundTransparency = 1
+	warnTxt.Font = Enum.Font.GothamBold
+	warnTxt.Text = "DANGER HIGH VOLTAGE"
+	warnTxt.TextColor3 = Color3.new(1, 1, 1)
+	warnTxt.TextScaled = true
+	warnTxt.Parent = warnGui
+
+	local warnLight = Instance.new("PointLight")
+	warnLight.Brightness = 1.2
+	warnLight.Range = 10
+	warnLight.Color = Color3.fromRGB(255, 60, 20)
+	warnLight.Parent = warnPart
+
+	---------------------------------------------------------------------------
+	-- MAIN SIGN (neon text on front face)
+	---------------------------------------------------------------------------
+	local signW3 = 14 * scale
+	local signH3 = 2.5 * scale
+
+	local signPart2 = Instance.new("Part")
+	signPart2.Name = "PowerPlantSign"
+	signPart2.Size = Vector3.new(signW3, signH3, 0.4 * scale)
+	signPart2.Position = Vector3.new(centerX, BUILDING_BASE + bodyH - 3 * scale, centerZ + bodyD / 2 + 0.3)
+	signPart2.Anchored = true
+	signPart2.Material = Enum.Material.Neon
+	signPart2.Color = spec.signColor
+	signPart2.Parent = model
+
+	local gui2 = Instance.new("SurfaceGui")
+	gui2.Face = Enum.NormalId.Front
+	gui2.Parent = signPart2
+
+	local txt2 = Instance.new("TextLabel")
+	txt2.Size = UDim2.new(1, 0, 1, 0)
+	txt2.BackgroundTransparency = 1
+	txt2.Font = Enum.Font.GothamBold
+	txt2.Text = spec.signText
+	txt2.TextColor3 = Color3.new(1, 1, 1)
+	txt2.TextScaled = true
+	txt2.Parent = gui2
+
+	local signLight2 = Instance.new("PointLight")
+	signLight2.Brightness = 1.5
+	signLight2.Range = 16
+	signLight2.Color = spec.signColor
+	signLight2.Parent = signPart2
+
+	---------------------------------------------------------------------------
+	-- SECURITY FENCE (+Z side, chain-link style)
+	---------------------------------------------------------------------------
+	local fenceH = 4 * scale
+	local fenceW = 34 * scale
+	local fenceZ2 = centerZ + bodyD / 2 + 10 * scale
+
+	local fence = Instance.new("Part")
+	fence.Name = "SecurityFence"
+	fence.Size = Vector3.new(fenceW, fenceH, 0.3 * scale)
+	fence.Position = Vector3.new(centerX, BUILDING_BASE + fenceH / 2, fenceZ2)
+	fence.Anchored = true
+	fence.Material = Enum.Material.Metal
+	fence.Color = Color3.fromRGB(130, 130, 135)
+	fence.Transparency = 0.3
+	fence.Parent = model
+
+	local postCount = 6
+	local postSpacing = fenceW / (postCount + 1)
+	for i = 1, postCount do
+		local postX = centerX - fenceW / 2 + i * postSpacing
+		local post = Instance.new("Part")
+		post.Name = "FencePost"
+		post.Size = Vector3.new(0.4 * scale, fenceH + 0.5 * scale, 0.4 * scale)
+		post.Position = Vector3.new(postX, BUILDING_BASE + (fenceH + 0.5 * scale) / 2, fenceZ2)
+		post.Anchored = true
+		post.Material = Enum.Material.Metal
+		post.Color = Color3.fromRGB(110, 110, 115)
+		post.Parent = model
+	end
+
+	if options.parent then
+		model.Parent = options.parent
+	end
+
+	-- Return animation data for electrical arc
+	return model, {
+		type = "electrical_arc",
+		beam1 = beam,
+		beam2 = beam2,
+		glow1 = glow1,
+		glow2 = glow2,
+		baseScale = scale,
+	}
+end
+
 return AssetLibrary
